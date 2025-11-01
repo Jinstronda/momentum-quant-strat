@@ -356,8 +356,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot and save drawdown chart.
-
-        Args:
+    
+    Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -413,8 +413,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot distribution of daily returns.
-
-        Args:
+    
+    Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -439,15 +439,16 @@ class BacktestReporter:
         stats.probplot(daily_returns, dist="norm", plot=ax2)
         ax2.set_title('Q-Q Plot', fontsize=14, fontweight='bold')
         ax2.grid(True, alpha=0.3)
-
+        
         plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
         plt.tight_layout()
-
+        
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-
+        
         print(f"Returns distribution plot saved to {output_path}")
+    
     def plot_monthly_returns(
         self,
         equity_curve: pd.DataFrame,
@@ -456,8 +457,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot monthly returns as a heatmap.
-
-        Args:
+    
+    Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -465,24 +466,24 @@ class BacktestReporter:
         # Calculate daily returns
         equity_curve = equity_curve.copy()
         equity_curve['returns'] = equity_curve['equity'].pct_change()
-
+        
         # Resample to monthly and calculate cumulative returns
         monthly_returns = equity_curve['returns'].resample('ME').apply(
             lambda x: (1 + x).prod() - 1
         ) * 100
-
+        
         # Create pivot table for heatmap
         monthly_returns_df = pd.DataFrame(monthly_returns)
         monthly_returns_df['Year'] = monthly_returns_df.index.year
         monthly_returns_df['Month'] = monthly_returns_df.index.month
-
+        
         pivot = monthly_returns_df.pivot(index='Year', columns='Month', values='returns')
         pivot.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-
+        
         # Create heatmap
         fig, ax = plt.subplots(figsize=(14, 8))
-
+        
         sns.heatmap(
             pivot,
             annot=True,
@@ -493,17 +494,17 @@ class BacktestReporter:
             linewidths=0.5,
             ax=ax
         )
-
+        
         ax.set_title(title, fontsize=16, fontweight='bold')
         ax.set_xlabel('Month', fontsize=12)
         ax.set_ylabel('Year', fontsize=12)
-
+        
         plt.tight_layout()
-
+    
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-
+        
         print(f"Monthly returns heatmap saved to {output_path}")
     
     def plot_momentum_over_time(
@@ -637,13 +638,13 @@ class BacktestReporter:
         vix_prices: pd.Series,
         equity_curve: pd.DataFrame,
         config: Dict,
-        title: str = "STORMGUARD 3-Component Analysis",
+        title: str = "STORMGUARD Analysis (Adapted)",
         filename: str = "stormguard_signals.png"
     ) -> None:
         """
-        Plot 3-panel STORMGUARD component analysis.
+        Plot 4-panel adapted STORMGUARD analysis.
         
-        Shows all 3 components with bullish/bearish zones.
+        Shows all adapted metrics with bullish/bearish zones.
     
     Args:
             spy_prices: SPY price series
@@ -654,67 +655,73 @@ class BacktestReporter:
             title: Plot title
             filename: Output filename
         """
-        from src.indicators import (
-            check_dema_price_trend, check_obv_money_flow, check_vix_sentiment,
-            calculate_double_ema, calculate_obv
+        from src.stormguard import StormGuardCalculator
+        
+        # Create calculator and get metrics
+        calculator = StormGuardCalculator(
+            volatility_threshold=config.get('stormguard_volatility_threshold', 40.0),
+            false_alarm_days=config.get('stormguard_false_alarm_days', 10),
+            early_return_threshold=config.get('stormguard_early_return_threshold', 0.75)
         )
         
-        fig, axes = plt.subplots(3, 1, figsize=(16, 12), 
-                                gridspec_kw={'height_ratios': [1, 1, 1]})
+        metrics = calculator.calculate_all_metrics(spy_prices, spy_volume, vix_prices)
         
-        # Component 1: Price Trend (DEMA crossover)
-        prices_df = spy_prices.to_frame()
-        dema_fast = calculate_double_ema(prices_df, config['stormguard_dema_fast']).iloc[:, 0]
-        dema_slow = calculate_double_ema(prices_df, config['stormguard_dema_slow']).iloc[:, 0]
+        fig, axes = plt.subplots(4, 1, figsize=(16, 16), 
+                                gridspec_kw={'height_ratios': [1, 1, 1, 1]})
         
-        axes[0].plot(spy_prices.index, dema_fast, linewidth=2, 
-                    label=f"DEMA({config['stormguard_dema_fast']})", color='#2E86AB')
-        axes[0].plot(spy_prices.index, dema_slow, linewidth=2, 
-                    label=f"DEMA({config['stormguard_dema_slow']})", color='#A23B72')
-        axes[0].fill_between(spy_prices.index, dema_fast, dema_slow,
-                            where=(dema_fast > dema_slow), alpha=0.2, color='green', label='Bullish')
-        axes[0].fill_between(spy_prices.index, dema_fast, dema_slow,
-                            where=(dema_fast <= dema_slow), alpha=0.2, color='red', label='Bearish')
-        axes[0].set_title('Component 1: Price Trend (DEMA Crossover)', fontweight='bold')
-        axes[0].set_ylabel('SPY Price ($)', fontsize=10)
+        # Metric 1: Price Trend (21 × DEMA_50(Returns) + 0.5%)
+        price_trend = metrics['price_trend']
+        axes[0].plot(price_trend.index, price_trend, linewidth=2, color='#2E86AB', label='Price-Trend')
+        axes[0].axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        axes[0].fill_between(price_trend.index, 0, price_trend,
+                            where=(price_trend > 0), alpha=0.2, color='green', label='Bullish')
+        axes[0].fill_between(price_trend.index, 0, price_trend,
+                            where=(price_trend <= 0), alpha=0.2, color='red', label='Bearish')
+        axes[0].set_title('Metric 1: Price-Trend = 21 × DEMA_50(SPY Returns) + 0.5%', fontweight='bold')
+        axes[0].set_ylabel('Price-Trend', fontsize=10)
         axes[0].legend(loc='upper left', fontsize=9)
         axes[0].grid(True, alpha=0.3)
         
-        # Component 2: Money Flow (OBV)
-        obv = calculate_obv(spy_prices, spy_volume)
-        obv_sma = obv.rolling(window=config['stormguard_obv_sma'], 
-                             min_periods=config['stormguard_obv_sma']).mean()
-        
-        axes[1].plot(spy_prices.index, obv, linewidth=1.5, 
-                    label='OBV', color='#2E86AB', alpha=0.7)
-        axes[1].plot(spy_prices.index, obv_sma, linewidth=2, 
-                    label=f"OBV_SMA({config['stormguard_obv_sma']})", color='#A23B72')
-        axes[1].fill_between(spy_prices.index, obv.min(), obv.max(),
-                            where=(obv > obv_sma), alpha=0.1, color='green')
-        axes[1].fill_between(spy_prices.index, obv.min(), obv.max(),
-                            where=(obv <= obv_sma), alpha=0.1, color='red')
-        axes[1].set_title('Component 2: Money Flow (On-Balance Volume)', fontweight='bold')
-        axes[1].set_ylabel('OBV', fontsize=10)
+        # Metric 2: Money Flow (OBV - SMA_50(OBV))
+        money_flow = metrics['money_flow']
+        axes[1].plot(money_flow.index, money_flow, linewidth=2, color='#2E86AB', label='Money Flow')
+        axes[1].axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        axes[1].fill_between(money_flow.index, 0, money_flow.max(),
+                            where=(money_flow > 0), alpha=0.1, color='green', label='Bullish')
+        axes[1].fill_between(money_flow.index, money_flow.min(), 0,
+                            where=(money_flow <= 0), alpha=0.1, color='red', label='Bearish')
+        axes[1].set_title('Metric 2: Money Flow = OBV - SMA_50(OBV)', fontweight='bold')
+        axes[1].set_ylabel('Money Flow', fontsize=10)
         axes[1].legend(loc='upper left', fontsize=9)
         axes[1].grid(True, alpha=0.3)
         
-        # Component 3: Sentiment (VIX adaptive)
-        vix_sma = vix_prices.rolling(window=config['stormguard_vix_sma'],
-                                    min_periods=config['stormguard_vix_sma']).mean()
-        
-        axes[2].plot(vix_prices.index, vix_prices, linewidth=1.5, 
-                    label='VIX', color='#D62728', alpha=0.8)
-        axes[2].plot(vix_prices.index, vix_sma, linewidth=2, 
-                    label=f"VIX_SMA({config['stormguard_vix_sma']})", color='#8B4513')
-        axes[2].fill_between(vix_prices.index, 0, vix_prices.max(),
-                            where=(vix_prices < vix_sma), alpha=0.1, color='green')
-        axes[2].fill_between(vix_prices.index, 0, vix_prices.max(),
-                            where=(vix_prices >= vix_sma), alpha=0.1, color='red')
-        axes[2].set_title('Component 3: Sentiment (VIX Adaptive)', fontweight='bold')
-        axes[2].set_ylabel('VIX', fontsize=10)
-        axes[2].set_xlabel('Date', fontsize=12)
+        # Metric 3: Sentiment (SMA_50(VIX) - VIX)
+        sentiment = metrics['sentiment']
+        axes[2].plot(sentiment.index, sentiment, linewidth=2, color='#A23B72', label='Sentiment')
+        axes[2].axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
+        axes[2].fill_between(sentiment.index, 0, sentiment.max(),
+                            where=(sentiment > 0), alpha=0.1, color='green', label='Bullish (Low Fear)')
+        axes[2].fill_between(sentiment.index, sentiment.min(), 0,
+                            where=(sentiment <= 0), alpha=0.1, color='red', label='Bearish (High Fear)')
+        axes[2].set_title('Metric 3: Sentiment = SMA_50(VIX) - VIX', fontweight='bold')
+        axes[2].set_ylabel('Sentiment', fontsize=10)
         axes[2].legend(loc='upper left', fontsize=9)
         axes[2].grid(True, alpha=0.3)
+        
+        # Metric 4: Market Volatility ((2/3) × EMA_4(VIX))
+        volatility = metrics['market_volatility']
+        threshold = config.get('stormguard_volatility_threshold', 40.0)
+        axes[3].plot(volatility.index, volatility, linewidth=2, color='#D62728', label='Market Volatility')
+        axes[3].axhline(y=threshold, color='red', linestyle='--', linewidth=2, label=f'Threshold ({threshold})')
+        axes[3].fill_between(volatility.index, 0, threshold,
+                            where=(volatility < threshold), alpha=0.1, color='green', label='Normal')
+        axes[3].fill_between(volatility.index, threshold, volatility.max(),
+                            where=(volatility >= threshold), alpha=0.1, color='red', label='Panic')
+        axes[3].set_title('Metric 4: Market Volatility = (2/3) × EMA_4(VIX)', fontweight='bold')
+        axes[3].set_ylabel('Volatility', fontsize=10)
+        axes[3].set_xlabel('Date', fontsize=12)
+        axes[3].legend(loc='upper left', fontsize=9)
+        axes[3].grid(True, alpha=0.3)
         
         plt.suptitle(title, fontsize=16, fontweight='bold', y=0.995)
         plt.tight_layout()
@@ -759,7 +766,7 @@ class BacktestReporter:
         print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
         print(f"{'='*60}\n")
-
+        
         # Save data files
         self.save_metrics(metrics, f"{universe_name}_metrics.csv")
         self.save_trades(trades, f"{universe_name}_trades.csv")
@@ -810,8 +817,8 @@ class BacktestReporter:
         self.plot_monthly_returns(
             equity_curve,
             title=f"{universe_name} - Monthly Returns",
-                filename=f"{universe_name}_monthly_returns.png"
-            )
+            filename=f"{universe_name}_monthly_returns.png"
+        )
 
         # Plot filter timeline if using polymorphic momentum
         if filter_history is not None and not filter_history.empty:

@@ -123,21 +123,22 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             ema_derivative_lookback=config.get('ema_derivative_lookback', 10),
             safety_sma_short=config.get('safety_sma_short', 50),
             safety_sma_long=config.get('safety_sma_long', 200),
-            stormguard_dema_fast=config.get('stormguard_dema_fast', 50),
-            stormguard_dema_slow=config.get('stormguard_dema_slow', 100),
-            stormguard_obv_sma=config.get('stormguard_obv_sma', 50),
-            stormguard_vix_sma=config.get('stormguard_vix_sma', 50),
+            stormguard_dema_fast=config.get('stormguard_volatility_threshold', 20.0),  # Temporarily reuse param
+            stormguard_dema_slow=100,  # Not used anymore
+            stormguard_obv_sma=50,  # Not used anymore
+            stormguard_vix_sma=50,  # Not used anymore
             polymorphic_metric=config.get('polymorphic_metric', 'Sharpe'),
             polymorphic_initial_years=config.get('polymorphic_initial_years', 5),
             polymorphic_reeval_years=config.get('polymorphic_reeval_years', 2),
             initial_capital=initial_capital
         )
         
-        # Get SPY, safe assets, volume, VIX if needed for filters
+        # Get SPY, safe assets, volume, VIX, NYSE data if needed for filters
         spy_prices = None
         safe_prices = None
         spy_volume = None
         vix_prices = None
+        nyse_data = None
         
         if config.get('filter_type') == 'SAFETY_SWITCH':
             # Load SPY if not in universe (needed for market regime check)
@@ -157,18 +158,20 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
                 print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
         
         elif config.get('filter_type') == 'STORMGUARD':
-            print("Loading data for STORMGUARD 3-component filter...")
+            print("Loading data for STORMGUARD (Adapted Algorithm - SPY + VIX only)...")
             
             # Load SPY with volume
-            print("  Component 1: Price Trend (DEMA) - loading SPY...")
-            print("  Component 2: Money Flow (OBV) - loading SPY volume...")
+            print("  Metric 1: Price-Trend - 21 × DEMA_50(SPY Returns) + 0.5%")
+            print("  Metric 2: Money Flow - OBV - SMA_50(OBV) using SPY volume...")
             spy_prices, spy_volume = loader.get_symbol_with_volume('SPY', extended_start, end_date)
             
             # Load VIX
-            print("  Component 3: Sentiment (VIX) - loading VIX...")
+            print("  Metric 3: Sentiment - SMA_50(VIX) - VIX")
+            print("  Metric 4: Volatility Circuit Breaker - (VIX > 40) AND (SPY < SMA_20)")
             vix_prices, _ = loader.get_symbol_with_volume('^VIX', extended_start, end_date)
             
-            print("[OK] Loaded SPY (price + volume) and VIX\n")
+            print("[OK] Loaded SPY (price + volume) and VIX")
+            print("     Using adapted metrics (NYSE data not available on Yahoo Finance)\n")
             
             # Load safe assets for bear market rotation
             safe_assets = config.get('safe_assets', [])
@@ -178,7 +181,7 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
                 print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
         
         positions = strategy.generate_rebalance_positions(
-            prices, schedule, spy_prices, safe_prices, spy_volume, vix_prices
+            prices, schedule, spy_prices, safe_prices, spy_volume, vix_prices, nyse_data
         )
         
         # Get filter history if using polymorphic momentum
@@ -211,16 +214,18 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
                 risk_positions = invested_positions - safe_positions
                 print(f"     Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
         elif filter_type == 'STORMGUARD':
-            print(f"     Filter: STORMGUARD 3-Component")
-            print(f"       1. Price Trend: DEMA({config['stormguard_dema_fast']}/{config['stormguard_dema_slow']})")
-            print(f"       2. Money Flow: OBV > SMA({config['stormguard_obv_sma']})")
-            print(f"       3. Sentiment: VIX < VIX_SMA({config['stormguard_vix_sma']})")
+            print(f"     Filter: STORMGUARD (Adapted for Free Data)")
+            print(f"       Metric 1: Price-Trend = 21 × DEMA_50(SPY Returns) + 0.5%")
+            print(f"       Metric 2: Money Flow = OBV - SMA_50(OBV) using SPY volume")
+            print(f"       Metric 3: Sentiment = SMA_50(VIX) - VIX (low fear when > 0)")
+            print(f"       Metric 4: Volatility Circuit Breaker = (VIX > {config.get('stormguard_volatility_threshold', 40)}) AND (SPY < SMA_20)")
+            print(f"       State Machine: Asymmetric Bull/Bear with False Alarm & Early Return tests")
             if config.get('safe_assets'):
                 # Count safe asset positions
                 safe_symbols = set(config.get('safe_assets', []))
                 safe_positions = positions['position'].isin(safe_symbols).sum()
                 risk_positions = invested_positions - safe_positions
-                print(f"     Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
+                print(f"       Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
         else:
             print(f"     Filter: NONE")
         if filter_type not in ['SAFETY_SWITCH', 'STORMGUARD'] or not config.get('safe_assets'):

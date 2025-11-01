@@ -315,3 +315,22 @@ Each run creates a timestamped folder with the configuration in the name (e.g., 
 - Total Return: 42.70%
 - Path: `output\20251101_215230_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1`
 
+
+## 20251101_221957_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:20:14
+
+**Configuration:**
+- Universe: US_Sector_Cyclicals
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: SAFETY_SWITCH (SPY 50/200d) + 12 safe assets
+
+**Results:**
+- CAGR: 6.64%
+- Sharpe: 0.24
+- Sortino: 0.25
+- Calmar: 0.13
+- Max DD: -51.30%
+- Total Return: 42.70%
+- Path: `output\20251101_221957_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1`
+

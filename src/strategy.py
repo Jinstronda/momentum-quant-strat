@@ -15,6 +15,7 @@ from src.indicators import (
     check_vix_sentiment
 )
 from src.polymorphic import PolymorphicMomentumStrategy
+from src.stormguard import StormGuardCalculator
 
 
 class MomentumStrategy:
@@ -71,10 +72,7 @@ class MomentumStrategy:
         self.ema_derivative_lookback = ema_derivative_lookback
         self.safety_sma_short = safety_sma_short
         self.safety_sma_long = safety_sma_long
-        self.stormguard_dema_fast = stormguard_dema_fast
-        self.stormguard_dema_slow = stormguard_dema_slow
-        self.stormguard_obv_sma = stormguard_obv_sma
-        self.stormguard_vix_sma = stormguard_vix_sma
+        self.initial_capital = initial_capital
         
         # Polymorphic momentum setup
         self.polymorphic_manager: Optional[PolymorphicMomentumStrategy] = None
@@ -84,6 +82,16 @@ class MomentumStrategy:
                 initial_lookback_years=polymorphic_initial_years,
                 reeval_lookback_years=polymorphic_reeval_years,
                 initial_capital=initial_capital
+            )
+        
+        # StormGuard setup (real algorithm)
+        self.stormguard: Optional[StormGuardCalculator] = None
+        if filter_type == "STORMGUARD":
+            # Use passed parameters or defaults from config
+            self.stormguard = StormGuardCalculator(
+                volatility_threshold=stormguard_dema_fast if stormguard_dema_fast else 20.0,  # Reuse param temporarily
+                false_alarm_days=10,
+                early_return_threshold=0.05
             )
     
     def generate_signals(
@@ -148,7 +156,9 @@ class MomentumStrategy:
         safe_prices: Optional[pd.DataFrame] = None,
         all_rebalance_dates: Optional[List[datetime]] = None,
         spy_volume: Optional[pd.Series] = None,
-        vix_prices: Optional[pd.Series] = None
+        vix_prices: Optional[pd.Series] = None,
+        nyse_data: Optional[Dict[str, pd.Series]] = None,
+        schedule: Optional[pd.DataFrame] = None
     ) -> Optional[str]:
         """
         Get the single position to hold based on data up to signal_date.
@@ -288,32 +298,29 @@ class MomentumStrategy:
                 safe_asset_selected = select_safe_asset(safe_prices, momentum_type, momentum_period)
                 return safe_asset_selected
         
-        # Apply STORMGUARD filter (3-component system)
+        # Apply STORMGUARD filter (Adapted StormGuard-Armor Algorithm)
         if self.filter_type == "STORMGUARD":
             if spy_prices is None or spy_volume is None or vix_prices is None:
                 raise ValueError("SPY prices, SPY volume, and VIX prices required for STORMGUARD filter")
+            if schedule is None:
+                raise ValueError("Schedule required for STORMGUARD filter (month-end detection)")
             
-            # Filter data up to signal date
+            # Filter all data up to signal date
             spy_up_to_date = spy_prices[spy_prices.index <= signal_date]
             spy_vol_up_to_date = spy_volume[spy_volume.index <= signal_date]
             vix_up_to_date = vix_prices[vix_prices.index <= signal_date]
             
-            # Check all 3 components
-            dema_trend = check_dema_price_trend(
-                spy_up_to_date, self.stormguard_dema_fast, self.stormguard_dema_slow
-            )
-            obv_flow = check_obv_money_flow(
-                spy_up_to_date, spy_vol_up_to_date, self.stormguard_obv_sma
-            )
-            vix_sentiment = check_vix_sentiment(
-                vix_up_to_date, self.stormguard_vix_sma
+            # Get market state from adapted StormGuard algorithm
+            market_state = self.stormguard.get_market_state(
+                spy_up_to_date,
+                spy_vol_up_to_date,
+                vix_up_to_date,
+                signal_date,
+                schedule
             )
             
-            # All 3 components must be bullish
-            is_bullish = dema_trend & obv_flow & vix_sentiment
-            
-            # If any component is bearish, ALWAYS rotate to safe assets (never fails)
-            if signal_date in is_bullish.index and not is_bullish.loc[signal_date]:
+            # If BEAR market, ALWAYS rotate to safe assets (never fails)
+            if market_state == "BEAR":
                 if safe_prices is None or safe_prices.empty:
                     raise ValueError("Safe assets must be configured for STORMGUARD filter")
                 
@@ -357,7 +364,8 @@ class MomentumStrategy:
         spy_prices: Optional[pd.Series] = None,
         safe_prices: Optional[pd.DataFrame] = None,
         spy_volume: Optional[pd.Series] = None,
-        vix_prices: Optional[pd.Series] = None
+        vix_prices: Optional[pd.Series] = None,
+        nyse_data: Optional[Dict[str, pd.Series]] = None
     ) -> pd.DataFrame:
         """
         Generate positions for each rebalance date using no-lookahead approach.
@@ -385,7 +393,7 @@ class MomentumStrategy:
             # Get position based on data available only up to signal_date
             position = self.get_position_for_date(
                 prices, signal_date, spy_prices, safe_prices, all_signal_dates,
-                spy_volume, vix_prices
+                spy_volume, vix_prices, nyse_data, schedule
             )
             
             positions.append({

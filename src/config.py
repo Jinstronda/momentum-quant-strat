@@ -9,11 +9,11 @@ from datetime import datetime
 # ============================================================================
 
 # Backtest period
-START_DATE = datetime(2005, 1, 1)
+START_DATE = datetime(2010, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
 # Active universe to backtest
-ACTIVE_UNIVERSE = "US_Sector_Cyclicals"
+ACTIVE_UNIVERSE = "US_Tech_Innovation"
 
 # Momentum calculation
 MOMENTUM_TYPE = "POLYMORPHIC"  # Options: "ROC", "EMA", "Double_EMA", "DEMA", "TEMA", "POLYMORPHIC"
@@ -25,7 +25,7 @@ REBALANCE_FREQUENCY = "monthly"  # Options: "weekly" or "monthly"
 REBALANCE_WEEKDAY = 0  # For weekly: 0=Monday, 1=Tuesday, etc.
 
 # Market regime filter
-FILTER_TYPE = "SAFETY_SWITCH"  # Options: "DUAL_EMA", "SAFETY_SWITCH", "STORMGUARD", "NONE"
+FILTER_TYPE = "STORMGUARD"  # Options: "DUAL_EMA", "SAFETY_SWITCH", "STORMGUARD", "NONE"
 
 
 # ============================================================================
@@ -43,12 +43,11 @@ SAFETY_SMA_SHORT = 50   # SPY short SMA
 SAFETY_SMA_LONG = 200   # SPY long SMA
 # Rule: SPY.SMA(50) > SMA(200) → Bull, else Bear → safe assets
 
-# --- STORMGUARD (advanced 3-component market regime filter) ---
-STORMGUARD_DEMA_FAST = 50      # Fast DEMA for price trend
-STORMGUARD_DEMA_SLOW = 100     # Slow DEMA for price trend
-STORMGUARD_OBV_SMA = 50        # OBV smoothing for money flow
-STORMGUARD_VIX_SMA = 50        # VIX smoothing for sentiment (adaptive)
-# All 3 must be bullish: DEMA(50)>DEMA(100), OBV>SMA, VIX<SMA
+# --- STORMGUARD (Adapted StormGuard-Armor using SPY + VIX only) ---
+STORMGUARD_VOLATILITY_THRESHOLD = 40.0  # VIX threshold for circuit breaker
+STORMGUARD_FALSE_ALARM_DAYS = 10        # Days to check for false alarm validation
+STORMGUARD_EARLY_RETURN_THRESHOLD = 0.75  # 75% rebound threshold for early return
+# Adapted algorithm using OBV and VIX proxies (NYSE data not available on Yahoo Finance)
 
 # --- POLYMORPHIC MOMENTUM (automated filter selection) ---
 POLYMORPHIC_METRIC = "Sharpe"  # Options: "Sharpe" or "Sortino"
@@ -169,10 +168,9 @@ def get_config() -> Dict[str, Any]:
         "ema_derivative_lookback": EMA_DERIVATIVE_LOOKBACK,
         "safety_sma_short": SAFETY_SMA_SHORT,
         "safety_sma_long": SAFETY_SMA_LONG,
-        "stormguard_dema_fast": STORMGUARD_DEMA_FAST,
-        "stormguard_dema_slow": STORMGUARD_DEMA_SLOW,
-        "stormguard_obv_sma": STORMGUARD_OBV_SMA,
-        "stormguard_vix_sma": STORMGUARD_VIX_SMA,
+        "stormguard_volatility_threshold": STORMGUARD_VOLATILITY_THRESHOLD,
+        "stormguard_false_alarm_days": STORMGUARD_FALSE_ALARM_DAYS,
+        "stormguard_early_return_threshold": STORMGUARD_EARLY_RETURN_THRESHOLD,
         "polymorphic_metric": POLYMORPHIC_METRIC,
         "polymorphic_initial_years": POLYMORPHIC_INITIAL_YEARS,
         "polymorphic_reeval_years": POLYMORPHIC_REEVAL_YEARS,
