@@ -1,0 +1,14 @@
+Run Name: 20251101_224439_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1
+Timestamp: 20251101_224439
+Universe: US_Sector_Cyclicals
+Symbols: XLY, XLF, XLE, XLI, XLB, XLC, XRT, ITB, IYT, XLK, XLP, XHB
+Start Date: 2010-01-01
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Monthly
+Market: NYSE
+Filter: NONE
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

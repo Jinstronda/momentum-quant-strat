@@ -209,37 +209,91 @@ class BacktestReporter:
         
         # Regular: Color by position (stock/ETF held)
         elif 'position' in equity_curve.columns:
-            # Define color palette for different positions
+            # Define color palette with DISTINCT colors (no black/duplicates)
             position_colors = {
-                # CASH position (when None) - BLACK to stand out
-                None: '#000000',    # Black for CASH - very distinctive
-                'CASH': '#000000',  # Also handle string 'CASH' if used
-                # US Large Cap
+                # CASH should never appear
+                None: '#FF0000',    # RED if CASH appears (error indicator)
+                'CASH': '#FF0000',  # RED error indicator
+                # Core ETFs - Bright, distinct colors
                 'DIA': '#1f77b4',   # Blue
                 'SPY': '#ff7f0e',   # Orange
                 'QQQ': '#2ca02c',   # Green
                 'VTV': '#d62728',   # Red
                 'VUG': '#9467bd',   # Purple
-                'XLB': '#8c564b',   # Brown
-                'XLE': '#e377c2',   # Pink
-                'XLF': '#7f7f7f',   # Gray
-                'XLI': '#bcbd22',   # Olive
-                'XLK': '#17becf',   # Cyan
-                'XLY': '#ff9896',   # Light Red
-                # Developed Countries
-                'DFIV': '#aec7e8',  # Light Blue
-                'EFA': '#ffbb78',   # Light Orange
-                'EWA': '#98df8a',   # Light Green
-                'EWC': '#ff9896',   # Light Red
-                'EWG': '#c5b0d5',   # Light Purple
-                'EWJ': '#c49c94',   # Light Brown
-                'EWU': '#f7b6d2',   # Light Pink
+                'VNQ': '#8c564b',   # Brown
+                'XLB': '#e377c2',   # Pink
+                'XLE': '#bcbd22',   # Olive
+                'XLF': '#17becf',   # Cyan
+                'XLI': '#ff9896',   # Light Red
+                'XLK': '#aec7e8',   # Light Blue
+                'XLP': '#ffbb78',   # Peach
+                'XLU': '#98df8a',   # Light Green
+                'XLV': '#c5b0d5',   # Light Purple
+                'XLY': '#c49c94',   # Tan
+                'XLC': '#f7b6d2',   # Light Pink
+                'XRT': '#dbdb8d',   # Light Olive
+                'ITB': '#9edae5',   # Light Cyan
+                'IYT': '#ff6b6b',   # Coral
+                'XHB': '#a0d8ef',   # Baby Blue
+                # International
+                'EFA': '#ff8c42',   # Mango
+                'EWA': '#6a994e',   # Fern Green
+                'EWC': '#bc4749',   # Brick Red
+                'EWG': '#b388eb',   # Lavender
+                'EWJ': '#f49d6e',   # Apricot
+                'EWU': '#e0b1cb',   # Pastel Pink
+                'EWW': '#a7c957',   # Yellow Green
+                'EWZ': '#f3722c',   # Orange Red
+                'EZA': '#f9844a',   # Atomic Tangerine
                 'EZU': '#c7c7c7',   # Light Gray
-                'IEFA': '#dbdb8d',  # Light Olive
-                'SPDW': '#9edae5',  # Light Cyan
-                'VEA': '#ff6b6b',   # Coral Red
+                'FXI': '#f94144',   # Red Salsa
+                'IEFA': '#577590',  # Queen Blue
+                'SPDW': '#43aa8b',  # Zomp
+                'VEA': '#90be6d',   # Pistachio
+                'EEM': '#f8961e',   # Yellow Orange
+                'VWO': '#f3722c',   # Orange
+                'MCHI': '#f94144',  # Red
+                'INDA': '#f9c74f',  # Maize
+                'EWY': '#90be6d',   # Green
+                'EWT': '#43aa8b',   # Teal
+                'EWH': '#577590',   # Blue
+                'ILF': '#277da1',   # Cerulean
+                'IEMG': '#4d908e',  # Viridian
+                'SCHE': '#52b69a',  # Medium Aquamarine
+                'EWL': '#168aad',   # Blue NCS
+                # Commodities & Materials
                 'GLD': '#ffd700',   # Gold
-                # Safe Assets (Bonds - Blue shades)
+                'GDX': '#daa520',   # Goldenrod
+                'GDXJ': '#b8860b',  # Dark Goldenrod
+                'SLV': '#c0c0c0',   # Silver
+                'DBA': '#8b4513',   # Saddle Brown
+                'DBC': '#a0522d',   # Sienna
+                'USO': '#2f4f4f',   # Dark Slate Gray
+                'XME': '#cd853f',   # Peru
+                'COPX': '#b87333',  # Copper
+                'URA': '#7cfc00',   # Lawn Green
+                'PALL': '#e6e6fa',  # Lavender
+                'LIT': '#ff1493',   # Deep Pink
+                # Clean Energy & Tech
+                'TAN': '#ffeb3b',   # Yellow
+                'ICLN': '#4caf50',  # Green
+                'SMH': '#9c27b0',   # Purple
+                'SOXX': '#673ab7',  # Deep Purple
+                'ARKK': '#3f51b5',  # Indigo
+                'ARKW': '#2196f3',  # Blue
+                'XBI': '#00bcd4',   # Cyan
+                'IGV': '#009688',   # Teal
+                'CIBR': '#795548',  # Brown
+                'IYW': '#607d8b',   # Blue Gray
+                'BOTZ': '#ff5722',  # Deep Orange
+                'OIH': '#e91e63',   # Pink
+                'FCG': '#9e9e9e',   # Gray
+                'XOP': '#ff9800',   # Orange
+                'VDE': '#ff6f00',   # Amber
+                'AMLP': '#bf360c',  # Deep Orange
+                'NLR': '#827717',   # Lime
+                'IXC': '#558b2f',   # Light Green
+                # Safe Assets (Bonds - Blue spectrum)
                 'SHY': '#4169E1',   # Royal Blue
                 'VGSH': '#5B9BD5',  # Medium Blue
                 'AGG': '#7BAFD4',   # Light Steel Blue
@@ -251,6 +305,62 @@ class BacktestReporter:
                 'TLH': '#B0C4DE',   # Light Steel Blue
                 'TLT': '#B0E0E6',   # Powder Blue
                 'ZROZ': '#AFEEEE',  # Pale Turquoise
+                # Small/Mid Cap
+                'IWM': '#e63946',   # Imperial Red
+                'IJR': '#f1faee',   # Honeydew
+                'SPSM': '#a8dadc',  # Powder Blue
+                'SCHA': '#457b9d',  # Celadon Blue
+                'MDY': '#1d3557',   # Prussian Blue
+                'IJH': '#2a9d8f',   # Persian Green
+                'IWO': '#e76f51',   # Burnt Sienna
+                'IWN': '#f4a261',   # Sandy Brown
+                'VO': '#e9c46a',    # Earth Yellow
+                'IWR': '#264653',   # Charcoal
+                'RSP': '#287271',   # Skobeloff
+                'VTWO': '#3a5a40',  # Hunter Green
+                # Crypto/Tech Leaders
+                'IBIT': '#f72585',  # Steel Pink
+                'BITO': '#b5179e',  # Byzantine
+                'WGMI': '#7209b7',  # Purple
+                'BLOK': '#560bad',  # Violet
+                'COIN': '#480ca8',  # Indigo
+                'MSTR': '#3a0ca3',  # Trypan Blue
+                'RIOT': '#3f37c9',  # Ultramarine Blue
+                'MARA': '#4361ee',  # Palatinate Blue
+                'HUT': '#4895ef',   # United Nations Blue
+                'NVDA': '#4cc9f0',  # Vivid Sky Blue
+                'TSLA': '#06d6a0',  # Caribbean Green
+                'MSFT': '#118ab2',  # Blue Sapphire
+                'META': '#073b4c',  # Rich Black
+                'AMZN': '#ef476f',  # Radical Red
+                'AAPL': '#ffd166',  # Naples Yellow
+                'PLTR': '#06ffa5',  # Spring Green
+                'SHOP': '#fffb46',  # Lemon Yellow
+                'NFLX': '#e63946',  # Red
+                'RIVN': '#8338ec',  # Blue Violet
+                # Agriculture
+                'DE': '#588157',    # Hunter Green
+                'AGCO': '#a3b18a',  # Laurel Green
+                'CTVA': '#3a5a40',  # Hunter Green Dark
+                'FMC': '#dad7cd',   # Timberwolf
+                'NTR': '#344e41',   # Brunswick Green
+                'CF': '#8ecae6',    # Baby Blue
+                'MOS': '#219ebc',   # Blue Green
+                'ADM': '#023047',   # Prussian Blue
+                'BG': '#ffb703',    # Orange
+                'VMI': '#fb8500',   # Orange Web
+                'LNN': '#e85d04',   # Tenne
+                'TSN': '#dc2f02',   # Vermilion
+                'XOM': '#9b2226',   # Vivid Burgundy
+                'CVX': '#ae2012',   # Engineering Orange
+                'COP': '#bb3e03',   # Tenne
+                'WMB': '#ca6702',   # Alloy Orange
+                'EOG': '#ee9b00',   # Gamboge
+                'OKE': '#005f73',   # Midnight Green
+                'KMI': '#0a9396',   # Viridian Green
+                'SLB': '#94d2bd',   # Turquoise
+                'MPC': '#e9d8a6',   # Burlywood
+                'PSX': '#ffd60a',   # Cyber Yellow
             }
             
             # Get unique positions (including None for CASH)
@@ -284,7 +394,17 @@ class BacktestReporter:
                     if prev_position is not None or segment_start < i or is_last:
                         # Handle None as 'CASH'
                         display_position = 'CASH' if pd.isna(prev_position) else prev_position
-                        color = position_colors.get(prev_position, position_colors.get('CASH', '#8B4513'))
+                        # Get color - if asset not in palette, use a random bright color
+                        if prev_position in position_colors:
+                            color = position_colors[prev_position]
+                        elif pd.isna(prev_position):
+                            color = '#FF0000'  # RED for CASH (error)
+                        else:
+                            # Generate a unique bright color for unknown assets
+                            import hashlib
+                            hash_val = int(hashlib.md5(str(prev_position).encode()).hexdigest(), 16)
+                            color = f"#{(hash_val % 0xFFFFFF):06x}"
+                            print(f"[WARNING] Asset {prev_position} not in color palette, using generated color: {color}")
                         
                         # Only label if we haven't seen this position before
                         use_label = display_position not in legend_positions
@@ -431,22 +551,22 @@ class BacktestReporter:
         ax1.set_title('Returns Histogram', fontsize=14, fontweight='bold')
         ax1.set_xlabel('Daily Return (%)', fontsize=12)
         ax1.set_ylabel('Frequency', fontsize=12)
-        ax1.legend()
+    ax1.legend()
         ax1.grid(True, alpha=0.3)
         
         # Q-Q plot
         from scipy import stats
         stats.probplot(daily_returns, dist="norm", plot=ax2)
         ax2.set_title('Q-Q Plot', fontsize=14, fontweight='bold')
-        ax2.grid(True, alpha=0.3)
-        
+    ax2.grid(True, alpha=0.3)
+    
         plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
-        plt.tight_layout()
-        
+    plt.tight_layout()
+    
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        plt.close()
-        
+    plt.close()
+
         print(f"Returns distribution plot saved to {output_path}")
     
     def plot_monthly_returns(
@@ -471,8 +591,8 @@ class BacktestReporter:
         monthly_returns = equity_curve['returns'].resample('ME').apply(
             lambda x: (1 + x).prod() - 1
         ) * 100
-        
-        # Create pivot table for heatmap
+    
+    # Create pivot table for heatmap
         monthly_returns_df = pd.DataFrame(monthly_returns)
         monthly_returns_df['Year'] = monthly_returns_df.index.year
         monthly_returns_df['Month'] = monthly_returns_df.index.month
@@ -480,26 +600,26 @@ class BacktestReporter:
         pivot = monthly_returns_df.pivot(index='Year', columns='Month', values='returns')
         pivot.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        
+    
         # Create heatmap
-        fig, ax = plt.subplots(figsize=(14, 8))
-        
-        sns.heatmap(
-            pivot,
-            annot=True,
+    fig, ax = plt.subplots(figsize=(14, 8))
+    
+    sns.heatmap(
+        pivot,
+        annot=True,
             fmt='.2f',
-            cmap='RdYlGn',
-            center=0,
-            cbar_kws={'label': 'Return (%)'},
-            linewidths=0.5,
+        cmap='RdYlGn',
+        center=0,
+        cbar_kws={'label': 'Return (%)'},
+        linewidths=0.5,
             ax=ax
-        )
-        
+    )
+    
         ax.set_title(title, fontsize=16, fontweight='bold')
-        ax.set_xlabel('Month', fontsize=12)
-        ax.set_ylabel('Year', fontsize=12)
-        
-        plt.tight_layout()
+    ax.set_xlabel('Month', fontsize=12)
+    ax.set_ylabel('Year', fontsize=12)
+    
+    plt.tight_layout()
     
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -551,7 +671,7 @@ class BacktestReporter:
         
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-        plt.close()
+    plt.close()
 
         print(f"Momentum over time plot saved to {output_path}")
     
@@ -763,7 +883,7 @@ class BacktestReporter:
             vix_prices: Optional VIX prices for STORMGUARD plot
             config: Optional config dict for STORMGUARD parameters
         """
-        print(f"\n{'='*60}")
+    print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
         print(f"{'='*60}\n")
         
@@ -854,7 +974,7 @@ class BacktestReporter:
             )
         
         # Print summary metrics
-        print(f"\n{'='*60}")
+    print(f"\n{'='*60}")
         print(f"Summary Metrics for {universe_name}")
         print(f"{'='*60}")
         for key, value in metrics.items():
@@ -867,7 +987,7 @@ class BacktestReporter:
                     print(f"{key:.<40} {value:>15.2f}")
             else:
                 print(f"{key:.<40} {value:>15}")
-        print(f"{'='*60}\n")
+    print(f"{'='*60}\n")
 
         print(f"Report generation complete for {universe_name}\n")
     

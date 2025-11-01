@@ -13,7 +13,7 @@ START_DATE = datetime(2010, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
 # Active universe to backtest
-ACTIVE_UNIVERSE = "Energy_Clean_Energy"
+ACTIVE_UNIVERSE = "US_Small_Mid_Cap"
 
 # Momentum calculation
 MOMENTUM_TYPE = "POLYMORPHIC"  # Options: "ROC", "EMA", "Double_EMA", "DEMA", "TEMA", "POLYMORPHIC"
@@ -50,7 +50,7 @@ STORMGUARD_EARLY_RETURN_THRESHOLD = 0.75  # 75% rebound threshold for early retu
 # Adapted algorithm using OBV and VIX proxies (NYSE data not available on Yahoo Finance)
 
 # --- POLYMORPHIC MOMENTUM (automated filter selection) ---
-POLYMORPHIC_METRIC = "Sharpe"  # Options: "Sharpe" or "Sortino"
+POLYMORPHIC_METRIC = "Sortino"  # Options: "Sharpe" or "Sortino"
 POLYMORPHIC_INITIAL_YEARS = 1  # Years for initial bake-off
 POLYMORPHIC_REEVAL_YEARS = 2   # Years for quarterly re-evaluation
 POLYMORPHIC_FALLBACK_MOMENTUM = "ROC"  # Fallback if insufficient history

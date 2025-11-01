@@ -214,9 +214,15 @@ class MomentumStrategy:
             momentum_type = self.momentum_type
             momentum_period = self.momentum_period
         
-        # Check minimum data requirement - if insufficient, can't proceed
+        # This should NEVER happen if schedule was created correctly with lookback_periods
+        # If it does happen, it's a configuration error, not a data issue
         if len(prices_up_to_date) < momentum_period + 1:
-            return None
+            raise ValueError(
+                f"Insufficient data on {signal_date.date()}: "
+                f"Have {len(prices_up_to_date)} days, need {momentum_period + 1}. "
+                f"Check that schedule lookback_periods >= momentum_period. "
+                f"This should be caught earlier by adjusting actual_start_date."
+            )
         
         # Helper function to always select a safe asset (never fails)
         def select_safe_asset(safe_prices_df: pd.DataFrame, momentum_type: str, momentum_period: int) -> str:
@@ -341,21 +347,37 @@ class MomentumStrategy:
         else:
             momentum = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
         
+        # Momentum calculation should ALWAYS have data for signal_date if we have enough history
         if signal_date not in momentum.index:
-            # No momentum data for this date - return None (truly insufficient data)
-            return None
+            raise ValueError(
+                f"BUG: Momentum index missing {signal_date.date()}. "
+                f"Momentum has {len(momentum)} rows, prices have {len(prices_up_to_date)}. "
+                f"This indicates a bug in calculate_momentum()."
+            )
         
         momentum_values = momentum.loc[signal_date].dropna()
         
-        # If filter removed all assets, fallback to unfiltered momentum
-        if len(momentum_values) == 0 and self.filter_type == "DUAL_EMA":
-            # Try without filter as last resort
-            momentum_unfiltered = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
-            if signal_date in momentum_unfiltered.index:
-                momentum_values = momentum_unfiltered.loc[signal_date].dropna()
+        # If NO valid momentum values, this is a data quality issue, not normal behavior
+        if len(momentum_values) == 0:
+            # For DUAL_EMA filter: all assets might be filtered out (design choice)
+            if self.filter_type == "DUAL_EMA":
+                # Remove filter and retry (design: prefer some asset over none)
+                momentum_unfiltered = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
+                if signal_date in momentum_unfiltered.index:
+                    momentum_values = momentum_unfiltered.loc[signal_date].dropna()
+                    if len(momentum_values) > 0:
+                        print(f"[INFO] DUAL_EMA filtered all assets on {signal_date.date()}, selected from unfiltered: {momentum_values.idxmax()}")
+                        return momentum_values.idxmax()
+            
+            # If we get here, all assets have NaN momentum - this is a DATA QUALITY issue
+            raise ValueError(
+                f"BUG: All assets have NaN momentum on {signal_date.date()}. "
+                f"Assets: {list(prices_up_to_date.columns)}. "
+                f"This indicates bad price data or a bug in calculate_momentum()."
+            )
         
-        # Always return best asset if available, never None
-        return momentum_values.idxmax() if len(momentum_values) > 0 else None
+        # Normal case: return best momentum asset
+        return momentum_values.idxmax()
     
     def generate_rebalance_positions(
         self,

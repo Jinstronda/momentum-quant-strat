@@ -334,3 +334,117 @@ Each run creates a timestamped folder with the configuration in the name (e.g., 
 - Total Return: 42.70%
 - Path: `output\20251101_221957_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1`
 
+
+## 20251101_224416_US_Tech_Innovation_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:45:24
+
+**Configuration:**
+- Universe: US_Tech_Innovation
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 11.24%
+- Sharpe: 0.33
+- Sortino: 0.48
+- Calmar: 0.15
+- Max DD: -72.61%
+- Total Return: 117.23%
+- Path: `output\20251101_224416_US_Tech_Innovation_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_224439_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:45:38
+
+**Configuration:**
+- Universe: US_Sector_Cyclicals
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 21.99%
+- Sharpe: 0.81
+- Sortino: 1.10
+- Calmar: 0.71
+- Max DD: -30.77%
+- Total Return: 200.01%
+- Path: `output\20251101_224439_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_224453_Intl_Emerging_Markets_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:46:19
+
+**Configuration:**
+- Universe: Intl_Emerging_Markets
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: -5.58%
+- Sharpe: -0.23
+- Sortino: -0.30
+- Calmar: 0.09
+- Max DD: -62.16%
+- Total Return: -47.33%
+- Path: `output\20251101_224453_Intl_Emerging_Markets_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_224500_Energy_Clean_Energy_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:46:30
+
+**Configuration:**
+- Universe: Energy_Clean_Energy
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 11.17%
+- Sharpe: 0.34
+- Sortino: 0.50
+- Calmar: 0.18
+- Max DD: -63.16%
+- Total Return: 301.36%
+- Path: `output\20251101_224500_Energy_Clean_Energy_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_224509_Energy_Clean_Energy_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 22:46:35
+
+**Configuration:**
+- Universe: Energy_Clean_Energy
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 11.17%
+- Sharpe: 0.34
+- Sortino: 0.50
+- Calmar: 0.18
+- Max DD: -63.16%
+- Total Return: 301.36%
+- Path: `output\20251101_224509_Energy_Clean_Energy_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_234225_US_Small_Mid_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 23:43:15
+
+**Configuration:**
+- Universe: US_Small_Mid_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 9.13%
+- Sharpe: 0.50
+- Sortino: 0.70
+- Calmar: 0.33
+- Max DD: -27.87%
+- Total Return: 149.63%
+- Path: `output\20251101_234225_US_Small_Mid_Cap_POLYMORPHIC63d_M_Top1`
+

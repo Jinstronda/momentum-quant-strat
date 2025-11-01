@@ -9,7 +9,7 @@ from src.config import get_config, UNIVERSES
 
 def run_all_universes():
     """Run backtest for each universe in configuration."""
-    from main import run_backtest_for_universe, create_output_directory
+    from main import run_backtest_for_universe
     
     config = get_config()
     universes = list(UNIVERSES.keys())
@@ -32,8 +32,17 @@ def run_all_universes():
         print(f"{'#'*80}\n")
         
         try:
-            # Create output directory
-            output_dir = create_output_directory(universe_name, config)
+            # Create output directory name
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            momentum_label = config['momentum_type']
+            if momentum_label != 'POLYMORPHIC':
+                momentum_label = f"{momentum_label}{config['momentum_period']}d"
+            else:
+                momentum_label = f"{momentum_label}{config['momentum_period']}d"
+            
+            freq_label = 'W' if config['rebalance_frequency'] == 'weekly' else 'M'
+            output_dir = f"output/{timestamp}_{universe_name}_{momentum_label}_{freq_label}_Top{config['top_n']}"
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
             
             # Run backtest
             run_backtest_for_universe(universe_name, config, output_dir)
