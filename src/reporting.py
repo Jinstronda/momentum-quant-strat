@@ -104,6 +104,7 @@ class BacktestReporter:
         if 'position' in equity_curve.columns:
             # Define color palette for different positions
             position_colors = {
+                # US Large Cap
                 'DIA': '#1f77b4',   # Blue
                 'SPY': '#ff7f0e',   # Orange
                 'QQQ': '#2ca02c',   # Green
@@ -115,6 +116,19 @@ class BacktestReporter:
                 'XLI': '#bcbd22',   # Olive
                 'XLK': '#17becf',   # Cyan
                 'XLY': '#ff9896',   # Light Red
+                # Developed Countries
+                'DFIV': '#aec7e8',  # Light Blue
+                'EFA': '#ffbb78',   # Light Orange
+                'EWA': '#98df8a',   # Light Green
+                'EWC': '#ff9896',   # Light Red
+                'EWG': '#c5b0d5',   # Light Purple
+                'EWJ': '#c49c94',   # Light Brown
+                'EWU': '#f7b6d2',   # Light Pink
+                'EZU': '#c7c7c7',   # Light Gray
+                'IEFA': '#dbdb8d',  # Light Olive
+                'SPDW': '#9edae5',  # Light Cyan
+                'VEA': '#ff6b6b',   # Coral Red
+                'GLD': '#ffd700',   # Gold
             }
             
             # Get unique positions in order of appearance

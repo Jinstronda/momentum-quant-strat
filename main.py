@@ -2,15 +2,11 @@
 
 import sys
 import os
+from typing import Dict
 from datetime import datetime
 from pathlib import Path
 
-from src.config import (
-    START_DATE, END_DATE, ROC_PERIOD_DAYS, TOP_N, 
-    REBALANCE_WEEKDAY, UNIVERSES, ACTIVE_UNIVERSE,
-    DATA_DIR, CACHE_ENABLED, OUTPUT_DIR,
-    INITIAL_CAPITAL, COMMISSION_PCT, SLIPPAGE_PCT
-)
+from src.config import ACTIVE_UNIVERSE, get_config
 from src.data import DataLoader
 from src.schedule import create_rebalance_schedule
 from src.strategy import MomentumStrategy
@@ -19,39 +15,27 @@ from src.reporting import BacktestReporter
 from src.benchmark import BenchmarkRunner, calculate_relative_metrics
 
 
-def run_backtest_for_universe(
-    universe_name: str,
-    symbols: list,
-    start_date: datetime,
-    end_date: datetime,
-    roc_period: int,
-    top_n: int,
-    rebalance_weekday: int,
-    initial_capital: float,
-    commission_pct: float,
-    slippage_pct: float,
-    data_dir: str,
-    cache_enabled: bool,
-    output_dir: str
-) -> None:
+def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str) -> None:
     """
     Run complete backtest for a single universe.
     
     Args:
         universe_name: Name of the universe
-        symbols: List of symbols in the universe
-        start_date: Backtest start date
-        end_date: Backtest end date
-        roc_period: ROC lookback period
-        top_n: Number of top stocks to select
-        rebalance_weekday: Day of week for rebalancing
-        initial_capital: Starting capital
-        commission_pct: Commission percentage
-        slippage_pct: Slippage percentage
-        data_dir: Data directory for caching
-        cache_enabled: Whether to use cache
+        config: Configuration dictionary with all backtest parameters
         output_dir: Output directory for results
     """
+    # Extract parameters from config
+    symbols = config['universes'][universe_name]
+    start_date = config['start_date']
+    end_date = config['end_date']
+    roc_period = config['roc_period_days']
+    top_n = config['top_n']
+    rebalance_weekday = config['rebalance_weekday']
+    initial_capital = config['initial_capital']
+    commission_pct = config['commission_pct']
+    slippage_pct = config['slippage_pct']
+    data_dir = config['data_dir']
+    cache_enabled = config['cache_enabled']
     print(f"\n{'='*80}")
     print(f"Running backtest for universe: {universe_name}")
     print(f"Symbols: {', '.join(symbols)}")
@@ -60,7 +44,7 @@ def run_backtest_for_universe(
     
     try:
         # Step 1: Load data
-        print("Step 1/5: Loading price data...")
+        print("Step 1/6: Loading price data...")
         loader = DataLoader(data_dir=data_dir, cache_enabled=cache_enabled)
         prices = loader.get_close_prices(
             symbols=symbols,
@@ -71,7 +55,7 @@ def run_backtest_for_universe(
         print(f"[OK] Loaded {len(prices)} days of data for {len(prices.columns)} symbols\n")
         
         # Step 2: Create rebalance schedule
-        print("Step 2/5: Creating rebalance schedule...")
+        print("Step 2/6: Creating rebalance schedule...")
         schedule = create_rebalance_schedule(
             start_date=start_date,
             end_date=end_date,
@@ -82,13 +66,13 @@ def run_backtest_for_universe(
         print(f"[OK] Generated {len(schedule)} rebalance dates\n")
         
         # Step 3: Generate trading signals
-        print("Step 3/5: Generating trading signals...")
+        print("Step 3/6: Generating trading signals...")
         strategy = MomentumStrategy(roc_period=roc_period, top_n=top_n)
         positions = strategy.generate_rebalance_positions(prices, schedule)
         print(f"[OK] Generated positions for {len(positions)} rebalance dates\n")
         
         # Step 4: Run backtest
-        print("Step 4/5: Running backtest...")
+        print("Step 4/6: Running backtest...")
         engine = BacktestEngine(
             initial_capital=initial_capital,
             commission_pct=commission_pct,
@@ -192,11 +176,14 @@ def run_backtest_for_universe(
 
 def main():
     """Main entry point for running backtests."""
+    # Get configuration
+    config = get_config()
+    universe_name = ACTIVE_UNIVERSE
+    
     # Create timestamped output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    universe_name = ACTIVE_UNIVERSE
-    run_name = f"{timestamp}_{universe_name}_ROC{ROC_PERIOD_DAYS}d_Top{TOP_N}"
-    run_output_dir = os.path.join(OUTPUT_DIR, run_name)
+    run_name = f"{timestamp}_{universe_name}_ROC{config['roc_period_days']}d_Top{config['top_n']}"
+    run_output_dir = os.path.join(config['output_dir'], run_name)
     
     # Create directory
     Path(run_output_dir).mkdir(parents=True, exist_ok=True)
@@ -208,52 +195,41 @@ def main():
     print(f"Output Directory: {run_output_dir}")
     print(f"\nConfiguration:")
     print(f"  Universe: {universe_name}")
-    print(f"  Start Date: {START_DATE.date()}")
-    print(f"  End Date: {END_DATE.date()}")
-    print(f"  ROC Period: {ROC_PERIOD_DAYS} days")
-    print(f"  Top N: {TOP_N}")
-    print(f"  Rebalance: {'Monday' if REBALANCE_WEEKDAY == 0 else 'Weekday ' + str(REBALANCE_WEEKDAY)}")
-    print(f"  Initial Capital: ${INITIAL_CAPITAL:,.0f}")
-    print(f"  Commission: {COMMISSION_PCT*100:.2f}%")
-    print(f"  Slippage: {SLIPPAGE_PCT*100:.3f}%")
+    print(f"  Start Date: {config['start_date'].date()}")
+    print(f"  End Date: {config['end_date'].date()}")
+    print(f"  ROC Period: {config['roc_period_days']} days")
+    print(f"  Top N: {config['top_n']}")
+    print(f"  Rebalance: {'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])}")
+    print(f"  Initial Capital: ${config['initial_capital']:,.0f}")
+    print(f"  Commission: {config['commission_pct']*100:.2f}%")
+    print(f"  Slippage: {config['slippage_pct']*100:.3f}%")
     print("="*80)
     
     # Run backtest for active universe
-    symbols = UNIVERSES[universe_name]
-    
     run_backtest_for_universe(
         universe_name=universe_name,
-        symbols=symbols,
-        start_date=START_DATE,
-        end_date=END_DATE,
-        roc_period=ROC_PERIOD_DAYS,
-        top_n=TOP_N,
-        rebalance_weekday=REBALANCE_WEEKDAY,
-        initial_capital=INITIAL_CAPITAL,
-        commission_pct=COMMISSION_PCT,
-        slippage_pct=SLIPPAGE_PCT,
-        data_dir=DATA_DIR,
-        cache_enabled=CACHE_ENABLED,
+        config=config,
         output_dir=run_output_dir
     )
     
     # Save run configuration and create README
     config_file = os.path.join(run_output_dir, "run_config.txt")
     readme_file = os.path.join(run_output_dir, "README.txt")
+    symbols = config['universes'][universe_name]
     
     with open(config_file, 'w') as f:
         f.write(f"Run Name: {run_name}\n")
         f.write(f"Timestamp: {timestamp}\n")
         f.write(f"Universe: {universe_name}\n")
         f.write(f"Symbols: {', '.join(symbols)}\n")
-        f.write(f"Start Date: {START_DATE.date()}\n")
-        f.write(f"End Date: {END_DATE.date()}\n")
-        f.write(f"ROC Period: {ROC_PERIOD_DAYS} days\n")
-        f.write(f"Top N: {TOP_N}\n")
-        f.write(f"Rebalance Day: {'Monday' if REBALANCE_WEEKDAY == 0 else 'Weekday ' + str(REBALANCE_WEEKDAY)}\n")
-        f.write(f"Initial Capital: ${INITIAL_CAPITAL:,.2f}\n")
-        f.write(f"Commission: {COMMISSION_PCT*100:.2f}%\n")
-        f.write(f"Slippage: {SLIPPAGE_PCT*100:.3f}%\n")
+        f.write(f"Start Date: {config['start_date'].date()}\n")
+        f.write(f"End Date: {config['end_date'].date()}\n")
+        f.write(f"ROC Period: {config['roc_period_days']} days\n")
+        f.write(f"Top N: {config['top_n']}\n")
+        f.write(f"Rebalance Day: {'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])}\n")
+        f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
+        f.write(f"Commission: {config['commission_pct']*100:.2f}%\n")
+        f.write(f"Slippage: {config['slippage_pct']*100:.3f}%\n")
     
     # Create a comprehensive README
     with open(readme_file, 'w') as f:
@@ -264,11 +240,11 @@ def main():
         f.write("CONFIGURATION\n")
         f.write("-" * 80 + "\n")
         f.write(f"Universe:        {universe_name}\n")
-        f.write(f"Period:          {START_DATE.date()} to {END_DATE.date()}\n")
-        f.write(f"Strategy:        Top-{TOP_N} Momentum (ROC {ROC_PERIOD_DAYS} days)\n")
+        f.write(f"Period:          {config['start_date'].date()} to {config['end_date'].date()}\n")
+        f.write(f"Strategy:        Top-{config['top_n']} Momentum (ROC {config['roc_period_days']} days)\n")
         f.write(f"Rebalance:       Every Monday (NYSE calendar)\n")
-        f.write(f"Initial Capital: ${INITIAL_CAPITAL:,.2f}\n")
-        f.write(f"Costs:           {COMMISSION_PCT*100:.2f}% commission + {SLIPPAGE_PCT*100:.3f}% slippage\n\n")
+        f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
+        f.write(f"Costs:           {config['commission_pct']*100:.2f}% commission + {config['slippage_pct']*100:.3f}% slippage\n\n")
         
         f.write("FILES IN THIS DIRECTORY\n")
         f.write("-" * 80 + "\n")

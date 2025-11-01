@@ -5,7 +5,7 @@ from datetime import datetime
 
 
 # Backtest parameters
-START_DATE = datetime(2020, 1, 1)
+START_DATE = datetime(2005, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
 # Strategy parameters
@@ -28,9 +28,20 @@ UNIVERSES: Dict[str, List[str]] = {
         "XLK",  # Technology Select Sector SPDR
         "XLY",  # Consumer Discretionary Select Sector SPDR
     ],
-    # Future universes can be added here
-    # "US_Mid_Cap": [...],
-    # "International": [...],
+    "Developed_Countries": [
+        "DFIV", # iShares Developed Markets ex-US Small-Cap
+        "EFA",  # iShares MSCI EAFE ETF
+        "EWA",  # iShares MSCI Australia ETF
+        "EWC",  # iShares MSCI Canada ETF
+        "EWG",  # iShares MSCI Germany ETF
+        "EWJ",  # iShares MSCI Japan ETF
+        "EWU",  # iShares MSCI United Kingdom ETF
+        "EZU",  # iShares MSCI Eurozone ETF
+        "IEFA", # iShares Core MSCI EAFE ETF
+        "SPDW", # SPDR Portfolio Developed World ex-US ETF
+        "VEA",  # Vanguard FTSE Developed Markets ETF
+        "GLD",  # SPDR Gold Trust
+    ],
 }
 
 # Active universe to backtest

@@ -1,0 +1,12 @@
+Run Name: 20251101_172122_Developed_Countries_ROC21d_Top1
+Timestamp: 20251101_172122
+Universe: Developed_Countries
+Symbols: DFIV, EFA, EWA, EWC, EWG, EWJ, EWU, EZU, IEFA, SPDW, VEA, GLD
+Start Date: 2020-01-01
+End Date: 2024-12-31
+ROC Period: 21 days
+Top N: 1
+Rebalance Day: Monday
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

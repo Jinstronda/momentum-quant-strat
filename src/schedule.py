@@ -14,6 +14,7 @@ def get_rebalance_dates(
 ) -> List[datetime]:
     """
     Generate rebalance dates for a given weekday, respecting market holidays.
+    If the target weekday is a holiday, uses the next available trading day.
     
     Args:
         start_date: Start date for backtest
@@ -35,12 +36,45 @@ def get_rebalance_dates(
     
     trading_days = schedule.index.to_list()
     
-    # Filter for specified weekday
+    # Generate all target weekdays (e.g., all Mondays)
     rebalance_dates = []
-    for date in trading_days:
-        # Check if this is the desired weekday
-        if date.weekday() == weekday:
-            rebalance_dates.append(date.to_pydatetime())
+    current_week_start = start_date
+    
+    while current_week_start <= end_date:
+        # Find the target weekday in this week
+        days_ahead = (weekday - current_week_start.weekday()) % 7
+        target_date = current_week_start + timedelta(days=days_ahead)
+        
+        if target_date > end_date:
+            break
+        
+        # Check if target date is a trading day
+        target_date_ts = pd.Timestamp(target_date)
+        
+        if target_date_ts in [pd.Timestamp(d) for d in trading_days]:
+            # Target weekday is a trading day - use it
+            rebalance_dates.append(target_date)
+        else:
+            # Target weekday is a holiday - find next trading day in the same week
+            found_in_week = False
+            for i in range(1, 7):  # Check up to 6 days ahead (rest of the week)
+                next_date = target_date + timedelta(days=i)
+                next_date_ts = pd.Timestamp(next_date)
+                
+                # Only use it if it's still in the same week (Monday to Friday)
+                if next_date.weekday() > 4:  # Weekend
+                    break
+                    
+                if next_date_ts in [pd.Timestamp(d) for d in trading_days]:
+                    rebalance_dates.append(next_date)
+                    found_in_week = True
+                    break
+            
+            # If no trading day found in the same week, skip this week
+            # (entire week might be closed, rare but possible)
+        
+        # Move to next week
+        current_week_start += timedelta(days=7)
     
     return rebalance_dates
 
