@@ -551,21 +551,21 @@ class BacktestReporter:
         ax1.set_title('Returns Histogram', fontsize=14, fontweight='bold')
         ax1.set_xlabel('Daily Return (%)', fontsize=12)
         ax1.set_ylabel('Frequency', fontsize=12)
-    ax1.legend()
+        ax1.legend()
         ax1.grid(True, alpha=0.3)
-        
+
         # Q-Q plot
         from scipy import stats
         stats.probplot(daily_returns, dist="norm", plot=ax2)
         ax2.set_title('Q-Q Plot', fontsize=14, fontweight='bold')
-    ax2.grid(True, alpha=0.3)
-    
+        ax2.grid(True, alpha=0.3)
+
         plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
-    plt.tight_layout()
-    
+        plt.tight_layout()
+
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.close()
 
         print(f"Returns distribution plot saved to {output_path}")
     
@@ -591,40 +591,40 @@ class BacktestReporter:
         monthly_returns = equity_curve['returns'].resample('ME').apply(
             lambda x: (1 + x).prod() - 1
         ) * 100
-    
-    # Create pivot table for heatmap
+
+        # Create pivot table for heatmap
         monthly_returns_df = pd.DataFrame(monthly_returns)
         monthly_returns_df['Year'] = monthly_returns_df.index.year
         monthly_returns_df['Month'] = monthly_returns_df.index.month
-        
+
         pivot = monthly_returns_df.pivot(index='Year', columns='Month', values='returns')
         pivot.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    
+
         # Create heatmap
-    fig, ax = plt.subplots(figsize=(14, 8))
-    
-    sns.heatmap(
-        pivot,
-        annot=True,
+        fig, ax = plt.subplots(figsize=(14, 8))
+
+        sns.heatmap(
+            pivot,
+            annot=True,
             fmt='.2f',
-        cmap='RdYlGn',
-        center=0,
-        cbar_kws={'label': 'Return (%)'},
-        linewidths=0.5,
+            cmap='RdYlGn',
+            center=0,
+            cbar_kws={'label': 'Return (%)'},
+            linewidths=0.5,
             ax=ax
-    )
-    
+        )
+
         ax.set_title(title, fontsize=16, fontweight='bold')
-    ax.set_xlabel('Month', fontsize=12)
-    ax.set_ylabel('Year', fontsize=12)
-    
-    plt.tight_layout()
-    
+        ax.set_xlabel('Month', fontsize=12)
+        ax.set_ylabel('Year', fontsize=12)
+
+        plt.tight_layout()
+
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"Monthly returns heatmap saved to {output_path}")
     
     def plot_momentum_over_time(
@@ -671,7 +671,7 @@ class BacktestReporter:
         
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
-    plt.close()
+        plt.close()
 
         print(f"Momentum over time plot saved to {output_path}")
     
@@ -883,7 +883,7 @@ class BacktestReporter:
             vix_prices: Optional VIX prices for STORMGUARD plot
             config: Optional config dict for STORMGUARD parameters
         """
-    print(f"\n{'='*60}")
+        print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
         print(f"{'='*60}\n")
         
@@ -974,7 +974,7 @@ class BacktestReporter:
             )
         
         # Print summary metrics
-    print(f"\n{'='*60}")
+        print(f"\n{'='*60}")
         print(f"Summary Metrics for {universe_name}")
         print(f"{'='*60}")
         for key, value in metrics.items():
@@ -987,7 +987,7 @@ class BacktestReporter:
                     print(f"{key:.<40} {value:>15.2f}")
             else:
                 print(f"{key:.<40} {value:>15}")
-    print(f"{'='*60}\n")
+        print(f"{'='*60}\n")
 
         print(f"Report generation complete for {universe_name}\n")
     

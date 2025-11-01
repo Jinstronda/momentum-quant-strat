@@ -13,7 +13,7 @@ START_DATE = datetime(2010, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
 # Active universe to backtest
-ACTIVE_UNIVERSE = "US_Small_Mid_Cap"
+ACTIVE_UNIVERSE = "US_Tech_Innovation"
 
 # Momentum calculation
 MOMENTUM_TYPE = "POLYMORPHIC"  # Options: "ROC", "EMA", "Double_EMA", "DEMA", "TEMA", "POLYMORPHIC"
