@@ -246,16 +246,21 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             slippage_pct=slippage_pct
         )
         
-        # Get SPY prices (should already be in our universe)
+        # Get SPY prices - use actual_start_date to match strategy start date
         if 'SPY' in prices.columns:
+            # SPY already loaded, align to actual_start_date
             spy_prices = prices['SPY']
         else:
-            # If SPY not in universe, download it
-            spy_prices = loader.get_close_prices(['SPY'], start_date, end_date)['SPY']
+            # If SPY not in universe, download it starting from actual_start_date
+            spy_prices = loader.get_close_prices(['SPY'], actual_start_date, end_date)['SPY']
         
-        benchmark_equity, benchmark_trades = benchmark_runner.run_buy_and_hold(spy_prices, "SPY")
+        # Ensure benchmark starts at same date as strategy (align indices)
+        benchmark_start = equity_curve.index[0] if not equity_curve.empty else actual_start_date
+        spy_prices_aligned = spy_prices[spy_prices.index >= benchmark_start].copy()
+        
+        benchmark_equity, benchmark_trades = benchmark_runner.run_buy_and_hold(spy_prices_aligned, "SPY")
         benchmark_metrics = benchmark_runner.calculate_metrics(benchmark_equity)
-        print(f"[OK] Benchmark complete\n")
+        print(f"[OK] Benchmark complete (aligned to strategy start: {benchmark_start.date()})\n")
         
         # Step 6: Generate reports with benchmark comparison
         print("Step 6/6: Generating reports...")

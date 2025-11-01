@@ -1,0 +1,15 @@
+Run Name: 20251101_215230_US_Sector_Cyclicals_POLYMORPHIC63d_M_Top1
+Timestamp: 20251101_215230
+Universe: US_Sector_Cyclicals
+Symbols: XLY, XLF, XLE, XLI, XLB, XLC, XRT, ITB, IYT, XLK, XLP, XHB
+Start Date: 2005-01-01
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Monthly
+Market: NYSE
+Filter: Safety Switch (SPY 50d/200d SMA)
+Safe Assets: SHY, VGSH, AGG, BND, IEI, TIPX, BLV, IEF, TLH, TLT, ZROZ, GLD
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

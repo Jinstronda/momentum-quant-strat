@@ -7,7 +7,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-
 class BacktestReporter:
     """Generate reports and visualizations for backtest results."""
     
@@ -46,7 +45,7 @@ class BacktestReporter:
     ) -> None:
         """
         Save trade log to CSV.
-        
+
         Args:
             trades: DataFrame with trade details
             filename: Output filename
@@ -357,8 +356,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot and save drawdown chart.
-    
-    Args:
+
+        Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -397,13 +396,13 @@ class BacktestReporter:
             bbox=dict(boxstyle='round,pad=0.5', facecolor='yellow', alpha=0.7),
             arrowprops=dict(arrowstyle='->', connectionstyle='arc3,rad=0')
         )
-        
+
         plt.tight_layout()
-        
+
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"Drawdown plot saved to {output_path}")
     
     def plot_returns_distribution(
@@ -412,7 +411,14 @@ class BacktestReporter:
         title: str = "Daily Returns Distribution",
         filename: str = "returns_distribution.png"
     ) -> None:
-        """Plot distribution of daily returns."""
+        """
+        Plot distribution of daily returns.
+
+        Args:
+            equity_curve: DataFrame with 'equity' column
+            title: Plot title
+            filename: Output filename
+        """
         daily_returns = equity_curve['equity'].pct_change().dropna() * 100
         
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -433,16 +439,15 @@ class BacktestReporter:
         stats.probplot(daily_returns, dist="norm", plot=ax2)
         ax2.set_title('Q-Q Plot', fontsize=14, fontweight='bold')
         ax2.grid(True, alpha=0.3)
-        
+
         plt.suptitle(title, fontsize=16, fontweight='bold', y=1.02)
         plt.tight_layout()
-        
+
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"Returns distribution plot saved to {output_path}")
-    
     def plot_monthly_returns(
         self,
         equity_curve: pd.DataFrame,
@@ -451,8 +456,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot monthly returns as a heatmap.
-    
-    Args:
+
+        Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -460,24 +465,24 @@ class BacktestReporter:
         # Calculate daily returns
         equity_curve = equity_curve.copy()
         equity_curve['returns'] = equity_curve['equity'].pct_change()
-        
+
         # Resample to monthly and calculate cumulative returns
         monthly_returns = equity_curve['returns'].resample('ME').apply(
             lambda x: (1 + x).prod() - 1
         ) * 100
-    
-    # Create pivot table for heatmap
+
+        # Create pivot table for heatmap
         monthly_returns_df = pd.DataFrame(monthly_returns)
         monthly_returns_df['Year'] = monthly_returns_df.index.year
         monthly_returns_df['Month'] = monthly_returns_df.index.month
-        
+
         pivot = monthly_returns_df.pivot(index='Year', columns='Month', values='returns')
         pivot.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    
+
         # Create heatmap
         fig, ax = plt.subplots(figsize=(14, 8))
-        
+
         sns.heatmap(
             pivot,
             annot=True,
@@ -488,17 +493,17 @@ class BacktestReporter:
             linewidths=0.5,
             ax=ax
         )
-        
+
         ax.set_title(title, fontsize=16, fontweight='bold')
         ax.set_xlabel('Month', fontsize=12)
         ax.set_ylabel('Year', fontsize=12)
-        
+
         plt.tight_layout()
-        
+
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"Monthly returns heatmap saved to {output_path}")
     
     def plot_momentum_over_time(
@@ -754,12 +759,12 @@ class BacktestReporter:
         print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
         print(f"{'='*60}\n")
-        
+
         # Save data files
         self.save_metrics(metrics, f"{universe_name}_metrics.csv")
         self.save_trades(trades, f"{universe_name}_trades.csv")
         self.save_equity_curve(equity_curve, f"{universe_name}_equity.csv")
-        
+
         # Save filter history if using polymorphic momentum
         if filter_history is not None and not filter_history.empty:
             self.save_filter_history(filter_history, f"{universe_name}_filter_history.csv")
@@ -805,9 +810,9 @@ class BacktestReporter:
         self.plot_monthly_returns(
             equity_curve,
             title=f"{universe_name} - Monthly Returns",
-            filename=f"{universe_name}_monthly_returns.png"
-        )
-        
+                filename=f"{universe_name}_monthly_returns.png"
+            )
+
         # Plot filter timeline if using polymorphic momentum
         if filter_history is not None and not filter_history.empty:
             self.plot_filter_timeline(

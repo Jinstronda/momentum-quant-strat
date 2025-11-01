@@ -13,7 +13,7 @@ START_DATE = datetime(2005, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
 # Active universe to backtest
-ACTIVE_UNIVERSE = "AI_US_Large_Cap"
+ACTIVE_UNIVERSE = "US_Sector_Cyclicals"
 
 # Momentum calculation
 MOMENTUM_TYPE = "POLYMORPHIC"  # Options: "ROC", "EMA", "Double_EMA", "DEMA", "TEMA", "POLYMORPHIC"
@@ -21,11 +21,11 @@ MOMENTUM_PERIOD = 63  # Days (ignored if POLYMORPHIC) - 21=1M, 63=3M, 126=6M, 25
 TOP_N = 1  # Select top-N stocks (currently only top-1 supported)
 
 # Rebalancing
-REBALANCE_FREQUENCY = "weekly"  # Options: "weekly" or "monthly"
+REBALANCE_FREQUENCY = "monthly"  # Options: "weekly" or "monthly"
 REBALANCE_WEEKDAY = 0  # For weekly: 0=Monday, 1=Tuesday, etc.
 
 # Market regime filter
-FILTER_TYPE = "STORMGUARD"  # Options: "DUAL_EMA", "SAFETY_SWITCH", "STORMGUARD", "NONE"
+FILTER_TYPE = "SAFETY_SWITCH"  # Options: "DUAL_EMA", "SAFETY_SWITCH", "STORMGUARD", "NONE"
 
 
 # ============================================================================
@@ -52,10 +52,10 @@ STORMGUARD_VIX_SMA = 50        # VIX smoothing for sentiment (adaptive)
 
 # --- POLYMORPHIC MOMENTUM (automated filter selection) ---
 POLYMORPHIC_METRIC = "Sharpe"  # Options: "Sharpe" or "Sortino"
-POLYMORPHIC_INITIAL_YEARS = 5  # Years for initial bake-off
+POLYMORPHIC_INITIAL_YEARS = 1  # Years for initial bake-off
 POLYMORPHIC_REEVAL_YEARS = 2   # Years for quarterly re-evaluation
 POLYMORPHIC_FALLBACK_MOMENTUM = "ROC"  # Fallback if insufficient history
-POLYMORPHIC_MIN_HISTORY_YEARS = 5  # Minimum years needed
+POLYMORPHIC_MIN_HISTORY_YEARS = 1  # Minimum years needed
 
 
 # ============================================================================

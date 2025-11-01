@@ -204,9 +204,74 @@ class MomentumStrategy:
             momentum_type = self.momentum_type
             momentum_period = self.momentum_period
         
-        # Check minimum data requirement
+        # Check minimum data requirement - if insufficient, can't proceed
         if len(prices_up_to_date) < momentum_period + 1:
             return None
+        
+        # Helper function to always select a safe asset (never fails)
+        def select_safe_asset(safe_prices_df: pd.DataFrame, momentum_type: str, momentum_period: int) -> str:
+            """
+            Always return a safe asset. Uses momentum if possible, falls back to simple ROC,
+            or just picks the asset with most recent valid price data.
+            Logs all fallback attempts for debugging.
+            """
+            if safe_prices_df is None or safe_prices_df.empty:
+                raise ValueError("Safe assets must be available")
+            
+            safe_up_to_date = safe_prices_df[safe_prices_df.index <= signal_date]
+            
+            # Try full momentum calculation first
+            if len(safe_up_to_date) >= momentum_period + 1:
+                try:
+                    safe_momentum = calculate_momentum(safe_up_to_date, momentum_type, momentum_period)
+                    if signal_date in safe_momentum.index:
+                        safe_values = safe_momentum.loc[signal_date].dropna()
+                        if len(safe_values) > 0:
+                            selected = safe_values.idxmax()
+                            return selected
+                except Exception as e:
+                    print(f"[WARNING] Safe asset {momentum_type}({momentum_period}d) failed on {signal_date.date()}: {e}")
+            
+            # Fallback 1: Try ROC with shorter period (21 days minimum)
+            fallback_period = min(momentum_period, max(21, len(safe_up_to_date) - 1))
+            if fallback_period >= 21 and len(safe_up_to_date) >= fallback_period + 1:
+                try:
+                    safe_momentum_roc = calculate_momentum(safe_up_to_date, "ROC", fallback_period)
+                    if signal_date in safe_momentum_roc.index:
+                        safe_values = safe_momentum_roc.loc[signal_date].dropna()
+                        if len(safe_values) > 0:
+                            selected = safe_values.idxmax()
+                            print(f"[WARNING] Safe asset fallback to ROC({fallback_period}d): {selected} on {signal_date.date()} (primary {momentum_type} failed)")
+                            return selected
+                except Exception as e:
+                    print(f"[WARNING] Safe asset ROC({fallback_period}d) fallback failed on {signal_date.date()}: {e}")
+            
+            # Fallback 2: Use most recent price change (simple 1-day ROC if available)
+            if len(safe_up_to_date) >= 2:
+                try:
+                    recent_returns = safe_up_to_date.pct_change().iloc[-1].dropna()
+                    if len(recent_returns) > 0:
+                        selected = recent_returns.idxmax()
+                        print(f"[WARNING] Safe asset fallback to 1-day return: {selected} on {signal_date.date()} (all momentum calculations failed)")
+                        return selected
+                except Exception as e:
+                    print(f"[WARNING] Safe asset 1-day return fallback failed on {signal_date.date()}: {e}")
+            
+            # Fallback 3: Just pick the first asset with valid price on signal date
+            if signal_date in safe_up_to_date.index:
+                valid_on_date = safe_up_to_date.loc[signal_date].dropna()
+                if len(valid_on_date) > 0:
+                    selected = valid_on_date.index[0]
+                    print(f"[WARNING] Safe asset fallback to first valid price: {selected} on {signal_date.date()} (all momentum methods failed)")
+                    return selected
+            
+            # Fallback 4: Pick any asset with valid data
+            for col in safe_up_to_date.columns:
+                if not safe_up_to_date[col].isna().all():
+                    print(f"[ERROR] Safe asset emergency fallback to first available: {col} on {signal_date.date()} (minimal data available)")
+                    return col
+            
+            raise ValueError(f"No safe assets have valid data on {signal_date.date()}")
         
         # Apply Safety Switch filter first (market regime)
         if self.filter_type == "SAFETY_SWITCH":
@@ -215,22 +280,13 @@ class MomentumStrategy:
             spy_up_to_date = spy_prices[spy_prices.index <= signal_date]
             is_safe = check_market_safety(spy_up_to_date, self.safety_sma_short, self.safety_sma_long)
             
-            # If bear market, rotate to safe assets
+            # If bear market, ALWAYS rotate to safe assets (never fails)
             if signal_date in is_safe.index and not is_safe.loc[signal_date]:
                 if safe_prices is None or safe_prices.empty:
-                    return None  # No safe assets available, go to cash
+                    raise ValueError("Safe assets must be configured for SAFETY_SWITCH filter")
                 
-                # Select best safe asset using active momentum logic
-                safe_up_to_date = safe_prices[safe_prices.index <= signal_date]
-                if len(safe_up_to_date) < momentum_period + 1:
-                    return None
-                
-                safe_momentum = calculate_momentum(safe_up_to_date, momentum_type, momentum_period)
-                if signal_date not in safe_momentum.index:
-                    return None
-                
-                safe_values = safe_momentum.loc[signal_date].dropna()
-                return safe_values.idxmax() if len(safe_values) > 0 else None
+                safe_asset_selected = select_safe_asset(safe_prices, momentum_type, momentum_period)
+                return safe_asset_selected
         
         # Apply STORMGUARD filter (3-component system)
         if self.filter_type == "STORMGUARD":
@@ -256,38 +312,42 @@ class MomentumStrategy:
             # All 3 components must be bullish
             is_bullish = dema_trend & obv_flow & vix_sentiment
             
-            # If any component is bearish, rotate to safe assets
+            # If any component is bearish, ALWAYS rotate to safe assets (never fails)
             if signal_date in is_bullish.index and not is_bullish.loc[signal_date]:
                 if safe_prices is None or safe_prices.empty:
-                    return None  # No safe assets available, go to cash
+                    raise ValueError("Safe assets must be configured for STORMGUARD filter")
                 
-                # Select best safe asset using active momentum logic
-                safe_up_to_date = safe_prices[safe_prices.index <= signal_date]
-                if len(safe_up_to_date) < momentum_period + 1:
-                    return None
-                
-                safe_momentum = calculate_momentum(safe_up_to_date, momentum_type, momentum_period)
-                if signal_date not in safe_momentum.index:
-                    return None
-                
-                safe_values = safe_momentum.loc[signal_date].dropna()
-                return safe_values.idxmax() if len(safe_values) > 0 else None
+                safe_asset_selected = select_safe_asset(safe_prices, momentum_type, momentum_period)
+                return safe_asset_selected
         
-        # Calculate momentum with optional per-stock filter
+        # Calculate momentum for primary universe (fallback if safe assets failed or normal selection)
+        # Always try to select from primary universe - never go to cash
         if self.filter_type == "DUAL_EMA":
             if len(prices_up_to_date) < max(self.ema_short, self.ema_long) + self.ema_derivative_lookback:
-                return None
-            momentum = apply_dual_ema_filter_to_momentum(
-                prices_up_to_date, momentum_type, momentum_period,
-                self.ema_short, self.ema_long, self.ema_derivative_lookback
-            )
+                # Not enough data for filter, use unfiltered momentum
+                momentum = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
+            else:
+                momentum = apply_dual_ema_filter_to_momentum(
+                    prices_up_to_date, momentum_type, momentum_period,
+                    self.ema_short, self.ema_long, self.ema_derivative_lookback
+                )
         else:
             momentum = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
         
         if signal_date not in momentum.index:
+            # No momentum data for this date - return None (truly insufficient data)
             return None
         
         momentum_values = momentum.loc[signal_date].dropna()
+        
+        # If filter removed all assets, fallback to unfiltered momentum
+        if len(momentum_values) == 0 and self.filter_type == "DUAL_EMA":
+            # Try without filter as last resort
+            momentum_unfiltered = calculate_momentum(prices_up_to_date, momentum_type, momentum_period)
+            if signal_date in momentum_unfiltered.index:
+                momentum_values = momentum_unfiltered.loc[signal_date].dropna()
+        
+        # Always return best asset if available, never None
         return momentum_values.idxmax() if len(momentum_values) > 0 else None
     
     def generate_rebalance_positions(
