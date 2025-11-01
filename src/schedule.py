@@ -169,9 +169,34 @@ def align_dates_to_trading_days(
     return aligned
 
 
+def get_monthly_rebalance_dates(
+    start_date: datetime,
+    end_date: datetime,
+    market: str = 'NYSE'
+) -> List[datetime]:
+    """Get first trading day of each month."""
+    calendar = mcal.get_calendar(market)
+    schedule = calendar.schedule(start_date=start_date, end_date=end_date)
+    trading_days = schedule.index.to_list()
+    
+    rebalance_dates = []
+    current_month = None
+    
+    for day in trading_days:
+        day_dt = day.to_pydatetime()
+        month_key = (day_dt.year, day_dt.month)
+        
+        if month_key != current_month:
+            rebalance_dates.append(day_dt)
+            current_month = month_key
+    
+    return rebalance_dates
+
+
 def create_rebalance_schedule(
     start_date: datetime,
     end_date: datetime,
+    frequency: str = "weekly",
     weekday: int = 0,
     lookback_periods: int = 21,
     market: str = 'NYSE'
@@ -185,15 +210,19 @@ def create_rebalance_schedule(
     Args:
         start_date: Start date for backtest
         end_date: End date for backtest
-        weekday: Day of week for rebalancing (0=Monday)
+        frequency: "weekly" or "monthly"
+        weekday: Day of week for weekly rebalancing (0=Monday)
         lookback_periods: Number of periods needed for indicator calculation
         market: Market calendar to use
         
     Returns:
         DataFrame with columns: rebalance_date, signal_date, data_start_date
     """
-    # Get rebalance dates
-    rebalance_dates = get_rebalance_dates(start_date, end_date, weekday, market)
+    # Get rebalance dates based on frequency
+    if frequency == "monthly":
+        rebalance_dates = get_monthly_rebalance_dates(start_date, end_date, market)
+    else:  # weekly
+        rebalance_dates = get_rebalance_dates(start_date, end_date, weekday, market)
     
     calendar = mcal.get_calendar(market)
     

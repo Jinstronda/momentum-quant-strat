@@ -34,18 +34,19 @@ def sample_schedule(sample_prices):
 
 def test_strategy_initialization():
     """Test strategy initialization with different parameters."""
-    strategy = MomentumStrategy(roc_period=21, top_n=1)
-    assert strategy.roc_period == 21
+    strategy = MomentumStrategy(momentum_period=21, top_n=1)
+    assert strategy.momentum_period == 21
     assert strategy.top_n == 1
     
-    strategy2 = MomentumStrategy(roc_period=10, top_n=3)
-    assert strategy2.roc_period == 10
+    strategy2 = MomentumStrategy(momentum_type="DEMA", momentum_period=10, top_n=3)
+    assert strategy2.momentum_type == "DEMA"
+    assert strategy2.momentum_period == 10
     assert strategy2.top_n == 3
 
 
 def test_get_position_for_date(sample_prices):
     """Test single position selection."""
-    strategy = MomentumStrategy(roc_period=10, top_n=1)
+    strategy = MomentumStrategy(momentum_period=10, top_n=1)
     
     # Get position for a date with enough history
     signal_date = sample_prices.index[30]
@@ -57,7 +58,7 @@ def test_get_position_for_date(sample_prices):
 
 def test_get_position_insufficient_data(sample_prices):
     """Test position selection with insufficient data."""
-    strategy = MomentumStrategy(roc_period=10, top_n=1)
+    strategy = MomentumStrategy(momentum_period=10, top_n=1)
     
     # Try to get position on day 5 (not enough data)
     signal_date = sample_prices.index[5]
@@ -69,7 +70,7 @@ def test_get_position_insufficient_data(sample_prices):
 
 def test_generate_rebalance_positions(sample_prices):
     """Test position generation for rebalance schedule."""
-    strategy = MomentumStrategy(roc_period=10, top_n=1)
+    strategy = MomentumStrategy(momentum_period=10, top_n=1)
     
     # Create a simple schedule
     schedule = pd.DataFrame({
@@ -90,7 +91,7 @@ def test_generate_rebalance_positions(sample_prices):
 
 def test_calculate_position_roc(sample_prices):
     """Test ROC calculation for positions."""
-    strategy = MomentumStrategy(roc_period=10, top_n=1)
+    strategy = MomentumStrategy(momentum_period=10, top_n=1)
     
     schedule = pd.DataFrame({
         'rebalance_date': sample_prices.index[[20, 30, 40]],
@@ -110,7 +111,7 @@ def test_calculate_position_roc(sample_prices):
 
 def test_top_n_error():
     """Test that get_position_for_date raises error for top_n != 1."""
-    strategy = MomentumStrategy(roc_period=10, top_n=3)
+    strategy = MomentumStrategy(momentum_period=10, top_n=3)
     
     dates = pd.date_range(start='2020-01-01', periods=30, freq='D')
     prices = pd.DataFrame({'A': range(100, 130)}, index=dates)

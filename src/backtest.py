@@ -69,10 +69,21 @@ class BacktestEngine:
             if date in rebalance_dates:
                 new_position = positions.loc[date, 'position']
                 
-                # Handle position change
-                if new_position != current_position:
+                # Handle position change (NaN-safe comparison)
+                position_changed = False
+                if pd.isna(new_position) and pd.isna(current_position):
+                    # Both are cash/None - no change
+                    position_changed = False
+                elif pd.isna(new_position) or pd.isna(current_position):
+                    # One is cash, one isn't - position changed
+                    position_changed = True
+                else:
+                    # Both are valid positions - compare them
+                    position_changed = (new_position != current_position)
+                
+                if position_changed:
                     # Close existing position if any
-                    if current_position is not None and shares > 0:
+                    if not pd.isna(current_position) and shares > 0:
                         if current_position in prices.columns and date in prices.index:
                             exit_price = prices.loc[date, current_position]
                             gross_proceeds = shares * exit_price
@@ -95,7 +106,7 @@ class BacktestEngine:
                             shares = 0
                     
                     # Open new position if valid
-                    if new_position is not None and new_position in prices.columns:
+                    if not pd.isna(new_position) and new_position in prices.columns:
                         if date in prices.index:
                             entry_price = prices.loc[date, new_position]
                             
@@ -128,7 +139,7 @@ class BacktestEngine:
             
             # Calculate current equity
             position_value = 0
-            if current_position is not None and shares > 0:
+            if not pd.isna(current_position) and shares > 0:
                 if current_position in prices.columns and date in prices.index:
                     current_price = prices.loc[date, current_position]
                     position_value = shares * current_price

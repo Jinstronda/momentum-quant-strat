@@ -104,6 +104,9 @@ class BacktestReporter:
         if 'position' in equity_curve.columns:
             # Define color palette for different positions
             position_colors = {
+                # CASH position (when None) - BLACK to stand out
+                None: '#000000',    # Black for CASH - very distinctive
+                'CASH': '#000000',  # Also handle string 'CASH' if used
                 # US Large Cap
                 'DIA': '#1f77b4',   # Blue
                 'SPY': '#ff7f0e',   # Orange
@@ -131,40 +134,66 @@ class BacktestReporter:
                 'GLD': '#ffd700',   # Gold
             }
             
-            # Get unique positions in order of appearance
-            positions = equity_curve['position'].dropna().unique()
+            # Get unique positions (including None for CASH)
+            positions = equity_curve['position'].unique()
             
             # Plot equity curve with color changes based on position
             prev_position = None
             segment_start = 0
             
+            # Track which positions we've already added to legend
+            legend_positions = set()
+            
             for i in range(len(equity_curve)):
                 current_position = equity_curve['position'].iloc[i]
+                is_last = (i == len(equity_curve) - 1)
                 
-                # When position changes or at the end
-                if current_position != prev_position or i == len(equity_curve) - 1:
-                    if prev_position is not None and segment_start < i:
-                        # Plot the segment with the previous position's color
-                        color = position_colors.get(prev_position, '#000000')
+                # Check if position changed
+                position_changed = False
+                if pd.isna(current_position) and pd.isna(prev_position):
+                    # Both None, same position
+                    position_changed = False
+                elif pd.isna(current_position) or pd.isna(prev_position):
+                    # One is None, one isn't - position changed
+                    position_changed = True
+                else:
+                    # Both are not None, compare values
+                    position_changed = (current_position != prev_position)
+                
+                # If position changed or we're at the last point, plot the previous segment
+                if position_changed or is_last:
+                    if prev_position is not None or segment_start < i or is_last:
+                        # Handle None as 'CASH'
+                        display_position = 'CASH' if pd.isna(prev_position) else prev_position
+                        color = position_colors.get(prev_position, position_colors.get('CASH', '#8B4513'))
+                        
+                        # Only label if we haven't seen this position before
+                        use_label = display_position not in legend_positions
+                        if use_label:
+                            legend_positions.add(display_position)
+                        
                         ax.plot(
                             equity.index[segment_start:i+1],
                             equity.values[segment_start:i+1],
                             linewidth=2.5,
                             color=color,
-                            label=prev_position if prev_position not in ax.get_legend_handles_labels()[1] else ""
+                            label=display_position if use_label else ""
                         )
                     
-                    segment_start = i
-                    prev_position = current_position
+                    if position_changed:
+                        segment_start = i
+                        prev_position = current_position
             
-            # Create custom legend with all positions
+            # Create custom legend with all positions (including CASH)
             handles = []
             labels = []
+            from matplotlib.lines import Line2D
             for pos in positions:
-                if pos is not None and pos in position_colors:
-                    from matplotlib.lines import Line2D
-                    handles.append(Line2D([0], [0], color=position_colors[pos], linewidth=2.5))
-                    labels.append(pos)
+                # Handle None as 'CASH'
+                display_pos = 'CASH' if pd.isna(pos) else pos
+                color = position_colors.get(pos, position_colors.get('CASH', '#8B4513'))
+                handles.append(Line2D([0], [0], color=color, linewidth=2.5))
+                labels.append(display_pos)
             
             # Add to legend
             if handles:
@@ -359,12 +388,63 @@ class BacktestReporter:
         
         print(f"Monthly returns heatmap saved to {output_path}")
     
+    def plot_momentum_over_time(
+        self,
+        prices: pd.DataFrame,
+        momentum_type: str,
+        momentum_period: int,
+        title: str = "Momentum Over Time",
+        filename: str = "momentum_over_time.png"
+    ) -> None:
+        """
+        Plot momentum for all stocks over time using configured indicator.
+        
+        Args:
+            prices: DataFrame with symbols as columns, dates as index
+            momentum_type: "ROC", "Double_EMA", or "DEMA"
+            momentum_period: Momentum calculation period
+            title: Plot title
+            filename: Output filename
+        """
+        from src.indicators import calculate_momentum
+        
+        # Calculate momentum for all stocks
+        momentum = calculate_momentum(prices, method=momentum_type, period=momentum_period)
+        
+        # Create plot
+        fig, ax = plt.subplots(figsize=(16, 8))
+        
+        # Plot each stock's momentum
+        for column in momentum.columns:
+            ax.plot(momentum.index, momentum[column], linewidth=1.5, label=column, alpha=0.7)
+        
+        # Add zero line (only relevant for ROC)
+        if momentum_type == "ROC":
+            ax.axhline(y=0, color='black', linestyle='--', alpha=0.3, linewidth=1)
+        
+        ax.set_title(title, fontsize=16, fontweight='bold', pad=20)
+        ax.set_xlabel('Date', fontsize=12)
+        ax.set_ylabel(f'{momentum_type} {momentum_period}d', fontsize=12)
+        ax.legend(loc='upper left', fontsize=9, ncol=2)
+        ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        
+        print(f"Momentum over time plot saved to {output_path}")
+    
     def create_full_report(
         self,
         equity_curve: pd.DataFrame,
         trades: pd.DataFrame,
         metrics: Dict[str, float],
-        universe_name: str = "strategy"
+        universe_name: str = "strategy",
+        prices: Optional[pd.DataFrame] = None,
+        momentum_type: Optional[str] = None,
+        momentum_period: Optional[int] = None
     ) -> None:
         """
         Generate complete report with all visualizations and data exports.
@@ -374,6 +454,9 @@ class BacktestReporter:
             trades: DataFrame with trade details
             metrics: Dictionary of performance metrics
             universe_name: Name for file prefixes
+            prices: Optional DataFrame with price data for momentum plot
+            momentum_type: Optional momentum indicator type
+            momentum_period: Optional momentum period for plot
         """
         print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
@@ -408,6 +491,17 @@ class BacktestReporter:
             title=f"{universe_name} - Monthly Returns",
             filename=f"{universe_name}_monthly_returns.png"
         )
+        
+        # Plot momentum over time if prices provided
+        if prices is not None and momentum_period is not None:
+            mom_type = momentum_type if momentum_type else 'ROC'
+            self.plot_momentum_over_time(
+                prices,
+                momentum_type=mom_type,
+                momentum_period=momentum_period,
+                title=f"{universe_name} - Momentum ({mom_type} {momentum_period}d) Over Time",
+                filename=f"{universe_name}_momentum_over_time.png"
+            )
         
         # Print summary metrics
         print(f"\n{'='*60}")

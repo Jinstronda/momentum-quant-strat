@@ -5,26 +5,45 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from src.indicators import calculate_roc, get_top_symbol_per_date
+from src.indicators import (
+    calculate_roc,
+    calculate_momentum,
+    apply_dual_ema_filter_to_momentum
+)
 
 
 class MomentumStrategy:
-    """Pure momentum strategy - select top N stocks by ROC."""
+    """Pure momentum strategy - select top N stocks by ROC with optional MA filter."""
     
     def __init__(
         self,
-        roc_period: int = 21,
-        top_n: int = 1
+        momentum_type: str = "ROC",
+        momentum_period: int = 21,
+        top_n: int = 1,
+        use_ma_filter: bool = False,
+        ema_short: int = 20,
+        ema_long: int = 50,
+        ema_derivative_lookback: int = 10
     ):
         """
         Initialize momentum strategy.
         
         Args:
-            roc_period: Lookback period for ROC calculation (trading days)
+            momentum_type: "ROC" or "DEMA"
+            momentum_period: Lookback period (trading days)
             top_n: Number of top stocks to select
+            use_ma_filter: Whether to filter by dual EMA system
+            ema_short: Short-term EMA period (default 20)
+            ema_long: Long-term EMA period (default 50)
+            ema_derivative_lookback: Days to look back for 50 EMA derivative (default 10)
         """
-        self.roc_period = roc_period
+        self.momentum_type = momentum_type
+        self.momentum_period = momentum_period
         self.top_n = top_n
+        self.use_ma_filter = use_ma_filter
+        self.ema_short = ema_short
+        self.ema_long = ema_long
+        self.ema_derivative_lookback = ema_derivative_lookback
     
     def generate_signals(
         self,
@@ -42,8 +61,8 @@ class MomentumStrategy:
             DataFrame with rebalance dates as index, symbols as columns,
             1 where position should be held, 0 otherwise
         """
-        # Calculate ROC for all dates
-        roc = calculate_roc(prices, self.roc_period)
+        # Calculate momentum for all dates
+        roc = calculate_roc(prices, self.momentum_period)
         
         # For each rebalance date, select top N
         signals = []
@@ -88,14 +107,18 @@ class MomentumStrategy:
         """
         Get the single position to hold based on data up to signal_date.
         
-        This is for top-1 strategies where we hold only one position.
+        With MA filter enabled:
+        - Ranks all symbols by ROC
+        - Filters out symbols below their MA
+        - Selects highest ROC that passes filter
+        - Returns None (cash) if no symbols pass filter
         
         Args:
             prices: DataFrame with symbols as columns, dates as index
             signal_date: Date to calculate signal (using data up to this date)
             
         Returns:
-            Symbol name to hold, or None if no valid signal
+            Symbol name to hold, or None if no valid signal (go to cash)
         """
         if self.top_n != 1:
             raise ValueError("This method is only for top-1 strategies")
@@ -103,26 +126,37 @@ class MomentumStrategy:
         # Get prices up to signal date
         prices_up_to_date = prices[prices.index <= signal_date]
         
-        if len(prices_up_to_date) < self.roc_period + 1:
+        if len(prices_up_to_date) < self.momentum_period + 1:
             # Not enough data
             return None
         
-        # Calculate ROC
-        roc = calculate_roc(prices_up_to_date, self.roc_period)
+        # Calculate momentum
+        if self.use_ma_filter:
+            # Apply dual EMA filter - momentum is NaN for symbols that don't meet all conditions
+            if len(prices_up_to_date) < max(self.ema_short, self.ema_long) + self.ema_derivative_lookback:
+                return None
+            
+            momentum = apply_dual_ema_filter_to_momentum(
+                prices_up_to_date,
+                momentum_type=self.momentum_type,
+                momentum_period=self.momentum_period,
+                ema_short=self.ema_short,
+                ema_long=self.ema_long,
+                derivative_lookback=self.ema_derivative_lookback
+            )
+        else:
+            momentum = calculate_momentum(prices_up_to_date, self.momentum_type, self.momentum_period)
         
-        # Get ROC for the signal date
-        if signal_date not in roc.index:
+        if signal_date not in momentum.index:
             return None
         
-        roc_values = roc.loc[signal_date].dropna()
+        momentum_values = momentum.loc[signal_date].dropna()
         
-        if len(roc_values) == 0:
-            return None
+        if len(momentum_values) == 0:
+            return None  # No symbols pass filter - go to cash
         
-        # Return symbol with highest ROC
-        top_symbol = roc_values.idxmax()
-        
-        return top_symbol
+        # Return best momentum stock
+        return momentum_values.idxmax()
     
     def generate_rebalance_positions(
         self,
@@ -185,11 +219,11 @@ class MomentumStrategy:
             # Get prices up to signal date
             prices_up_to_date = prices[prices.index <= signal_date]
             
-            if len(prices_up_to_date) < self.roc_period + 1:
+            if len(prices_up_to_date) < self.momentum_period + 1:
                 continue
             
-            # Calculate ROC
-            roc = calculate_roc(prices_up_to_date, self.roc_period)
+            # Calculate momentum
+            roc = calculate_roc(prices_up_to_date, self.momentum_period)
             
             if signal_date not in roc.index:
                 continue

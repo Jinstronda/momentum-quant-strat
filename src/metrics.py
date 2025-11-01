@@ -46,6 +46,14 @@ def calculate_performance_metrics(
     else:
         sharpe = 0
     
+    # Sortino ratio (uses downside deviation instead of total volatility)
+    negative_returns = daily_returns[daily_returns < 0]
+    if len(negative_returns) > 0:
+        downside_std = negative_returns.std() * np.sqrt(252)
+        sortino = (cagr * 100) / (downside_std * 100) if downside_std > 0 else 0
+    else:
+        sortino = 0
+    
     # Maximum drawdown
     rolling_max = equity.expanding().max()
     drawdown = (equity - rolling_max) / rolling_max * 100
@@ -77,6 +85,7 @@ def calculate_performance_metrics(
         'CAGR (%)': cagr_pct,
         'Volatility (%)': volatility,
         'Sharpe Ratio': sharpe,
+        'Sortino Ratio': sortino,
         'Max Drawdown (%)': max_drawdown,
         'Calmar Ratio': calmar,
         'Win Rate (%)': win_rate,
