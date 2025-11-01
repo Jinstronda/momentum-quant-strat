@@ -4,81 +4,135 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 
-# Backtest parameters
+# ============================================================================
+# MAIN SETTINGS (Change these for different strategies)
+# ============================================================================
+
+# Backtest period
 START_DATE = datetime(2005, 1, 1)
 END_DATE = datetime(2024, 12, 31)
 
-# Strategy parameters - MOMENTUM CALCULATION
-MOMENTUM_TYPE = "Double_EMA"  # Options:
-                       #   "ROC" - Rate of Change (percentage change, responsive)
-                       #   "Double_EMA" - EMA(EMA(price)) - super smooth, slow, kills noise
-                       #   "DEMA" - 2*EMA - EMA(EMA) - technical DEMA, reduces lag
-MOMENTUM_PERIOD = 63  # Number of days for momentum calculation
-                       # Common values:
-                       #   21 days ≈ 1 month
-                       #   63 days ≈ 3 month  
-                       #   126 days ≈ 6 month (classic Jegadeesh-Titman)
-                       #   252 days ≈ 12 month
-                       #
-                       # Momentum Type Guide:
-                       # - ROC: Direct % change, most responsive, higher turnover
-                       # - Double_EMA: Smoothest, slowest, major trends only, low turnover
-                       # - DEMA: Technical formula, balanced lag reduction
-TOP_N = 1  # Select top-1 stock
+# Active universe to backtest
+ACTIVE_UNIVERSE = "AI_US_Large_Cap"
+
+# Momentum calculation
+MOMENTUM_TYPE = "POLYMORPHIC"  # Options: "ROC", "EMA", "Double_EMA", "DEMA", "TEMA", "POLYMORPHIC"
+MOMENTUM_PERIOD = 63  # Days (ignored if POLYMORPHIC) - 21=1M, 63=3M, 126=6M, 252=12M
+TOP_N = 1  # Select top-N stocks (currently only top-1 supported)
 
 # Rebalancing
-REBALANCE_FREQUENCY = "monthly"  # Options: "weekly" or "monthly"
+REBALANCE_FREQUENCY = "weekly"  # Options: "weekly" or "monthly"
 REBALANCE_WEEKDAY = 0  # For weekly: 0=Monday, 1=Tuesday, etc.
 
-# Moving Average Filter - DUAL EMA SYSTEM
-USE_MA_FILTER = True  # Enable/disable EMA filter
-EMA_SHORT_PERIOD = 20  # Short-term EMA (20 days)
-EMA_LONG_PERIOD = 50   # Long-term EMA (50 days)
-EMA_DERIVATIVE_LOOKBACK = 10  # Days to look back for 50 EMA derivative (slope)
+# Market regime filter
+FILTER_TYPE = "STORMGUARD"  # Options: "DUAL_EMA", "SAFETY_SWITCH", "STORMGUARD", "NONE"
 
-# Eligibility Rules (must meet ALL to be eligible):
-# 1. Price > 20 EMA
-# 2. 20 EMA > 50 EMA  
-# 3. 50 EMA derivative > 0 (trending up, calculated over EMA_DERIVATIVE_LOOKBACK days)
-#
-# Exit Rule (loses eligibility when):
-# - 50 EMA derivative < 0 (starts trending down)
-#
-# If no assets are eligible -> Go to CASH (money market)
 
-# Universe definitions
+# ============================================================================
+# FILTER CONFIGURATIONS (Advanced settings for each filter type)
+# ============================================================================
+
+# --- DUAL EMA FILTER (per-stock trend filter) ---
+EMA_SHORT_PERIOD = 20  # Short-term EMA
+EMA_LONG_PERIOD = 50   # Long-term EMA
+EMA_DERIVATIVE_LOOKBACK = 10  # Days for slope calculation
+# Stocks must pass: Price>20d, 20d>50d, 50d slope>0 → eligible
+
+# --- SAFETY SWITCH (simple market regime filter) ---
+SAFETY_SMA_SHORT = 50   # SPY short SMA
+SAFETY_SMA_LONG = 200   # SPY long SMA
+# Rule: SPY.SMA(50) > SMA(200) → Bull, else Bear → safe assets
+
+# --- STORMGUARD (advanced 3-component market regime filter) ---
+STORMGUARD_DEMA_FAST = 50      # Fast DEMA for price trend
+STORMGUARD_DEMA_SLOW = 100     # Slow DEMA for price trend
+STORMGUARD_OBV_SMA = 50        # OBV smoothing for money flow
+STORMGUARD_VIX_SMA = 50        # VIX smoothing for sentiment (adaptive)
+# All 3 must be bullish: DEMA(50)>DEMA(100), OBV>SMA, VIX<SMA
+
+# --- POLYMORPHIC MOMENTUM (automated filter selection) ---
+POLYMORPHIC_METRIC = "Sharpe"  # Options: "Sharpe" or "Sortino"
+POLYMORPHIC_INITIAL_YEARS = 5  # Years for initial bake-off
+POLYMORPHIC_REEVAL_YEARS = 2   # Years for quarterly re-evaluation
+POLYMORPHIC_FALLBACK_MOMENTUM = "ROC"  # Fallback if insufficient history
+POLYMORPHIC_MIN_HISTORY_YEARS = 5  # Minimum years needed
+
+
+# ============================================================================
+# UNIVERSES (Asset buckets to trade)
+# ============================================================================
+
 UNIVERSES: Dict[str, List[str]] = {
-    "US_Large_Cap": [
-        "DIA",  # Dow Jones Industrial Average
-        "SPY",  # S&P 500
-        "QQQ",  # Nasdaq 100
-        "VTV",  # Vanguard Value ETF
-        "VUG",  # Vanguard Growth ETF
-        "XLB",  # Materials Select Sector SPDR
-        "XLE",  # Energy Select Sector SPDR
-        "XLF",  # Financial Select Sector SPDR
-        "XLI",  # Industrial Select Sector SPDR
-        "XLK",  # Technology Select Sector SPDR
-        "XLY",  # Consumer Discretionary Select Sector SPDR
+    "AI_Developed_Countries": [
+        "EZA", "EWZ", "FXI", "QQQ", "EWA", "IWM", "EWL", "INDA", 
+        "GLD", "EWU", "EWW", "EWC", "EZA"
     ],
-    "Developed_Countries": [
-        "DFIV", # iShares Developed Markets ex-US Small-Cap
-        "EFA",  # iShares MSCI EAFE ETF
-        "EWA",  # iShares MSCI Australia ETF
-        "EWC",  # iShares MSCI Canada ETF
-        "EWG",  # iShares MSCI Germany ETF
-        "EWJ",  # iShares MSCI Japan ETF
-        "EWU",  # iShares MSCI United Kingdom ETF
-        "EZU",  # iShares MSCI Eurozone ETF
-        "IEFA", # iShares Core MSCI EAFE ETF
-        "SPDW", # SPDR Portfolio Developed World ex-US ETF
-        "VEA",  # Vanguard FTSE Developed Markets ETF
-        "GLD",  # SPDR Gold Trust
+    "AI_US_Large_Cap": [
+        "VNQ", "VTV", "VUG", "XLB", "XLE", "XLF", "XLI", "XLK", 
+        "XLP", "XLU", "XLV", "XLY"
+    ],
+    "AI_Energy": [
+        "XOM", "CVX", "COP", "WMB", "EOG", "OKE", "KMI", "SLB", 
+        "MPC", "PSX", "XLE"
+    ],
+    "US_Tech_Innovation": [
+        "QQQ", "SMH", "SOXX", "ARKK", "ARKW", "XBI", "IGV", "TAN", 
+        "CIBR", "IYW", "BOTZ"
+    ],
+    "US_Sector_Cyclicals": [
+        "XLY", "XLF", "XLE", "XLI", "XLB", "XLC", "XRT", "ITB", 
+        "IYT", "XLK", "XLP", "XHB"
+    ],
+    "US_Small_Mid_Cap": [
+        "IWM", "IJR", "SPSM", "SCHA", "MDY", "IJH", "IWO", "IWN", 
+        "VO", "IWR", "RSP", "VTWO"
+    ],
+    "Intl_Emerging_Markets": [
+        "EEM", "VWO", "EWZ", "FXI", "MCHI", "INDA", "EWY", "EWT", 
+        "EWH", "ILF", "IEMG", "SCHE"
+    ],
+    "Commodities_Gold_Materials": [
+        "GLD", "GDX", "GDXJ", "SLV", "DBA", "DBC", "USO", "XME", 
+        "COPX", "URA", "PALL", "LIT"
+    ],
+    "Energy_Clean_Energy": [
+        "XLE", "OIH", "FCG", "TAN", "ICLN", "URA", "LIT", "XOP", 
+        "VDE", "AMLP", "NLR", "IXC"
+    ],
+    "Crypto_Blockchain": [
+        "IBIT", "BITO", "WGMI", "BLOK", "COIN", "MSTR", "RIOT", 
+        "MARA", "HUT"
+    ],
+    "US_Tech_Leaders": [
+        "NVDA", "TSLA", "MSFT", "META", "AMZN", "AAPL", "PLTR", 
+        "COIN", "MSTR", "SHOP", "NFLX", "RIVN"
+    ],
+    "AI_Harvest_Agriculture": [
+        "DE", "AGCO", "CTVA", "FMC", "NTR", "CF", "MOS", "ADM", 
+        "BG", "VMI", "LNN", "TSN"
     ],
 }
 
-# Active universe to backtest
-ACTIVE_UNIVERSE = "US_Large_Cap"
+# Safe assets (for bear market rotation)
+SAFE_ASSETS = [
+    "SHY",   # iShares 1-3 Year Treasury Bond
+    "VGSH",  # Vanguard Short-Term Treasury
+    "AGG",   # iShares Core US Aggregate Bond
+    "BND",   # Vanguard Total Bond Market
+    "IEI",   # iShares 3-7 Year Treasury Bond
+    "TIPX",  # SPDR Bloomberg 1-10 Year TIPS
+    "BLV",   # Vanguard Long-Term Bond
+    "IEF",   # iShares 7-10 Year Treasury Bond
+    "TLH",   # iShares 10-20 Year Treasury Bond
+    "TLT",   # iShares 20+ Year Treasury Bond
+    "ZROZ",  # PIMCO 25+ Year Zero Coupon US Treasury
+    "GLD",   # SPDR Gold Trust
+]
+
+
+# ============================================================================
+# SYSTEM SETTINGS (Rarely changed)
+# ============================================================================
 
 # Data settings
 DATA_DIR = "data"
@@ -89,11 +143,15 @@ MARKET_CALENDAR = "NYSE"  # Market calendar for trading days/holidays
 OUTPUT_DIR = "output"
 EXPERIMENTS_LOG = "experiments/experiments.md"  # Auto-log results here
 
-# Trading settings
+# Trading costs
 INITIAL_CAPITAL = 100000.0
 COMMISSION_PCT = 0.001  # 0.1% per trade (buy and sell)
 SLIPPAGE_PCT = 0.0005   # 0.05% slippage
 
+
+# ============================================================================
+# CONFIG EXPORT (Do not modify)
+# ============================================================================
 
 def get_config() -> Dict[str, Any]:
     """Return full configuration dictionary."""
@@ -105,11 +163,23 @@ def get_config() -> Dict[str, Any]:
         "top_n": TOP_N,
         "rebalance_frequency": REBALANCE_FREQUENCY,
         "rebalance_weekday": REBALANCE_WEEKDAY,
-        "use_ma_filter": USE_MA_FILTER,
+        "filter_type": FILTER_TYPE,
         "ema_short_period": EMA_SHORT_PERIOD,
         "ema_long_period": EMA_LONG_PERIOD,
         "ema_derivative_lookback": EMA_DERIVATIVE_LOOKBACK,
+        "safety_sma_short": SAFETY_SMA_SHORT,
+        "safety_sma_long": SAFETY_SMA_LONG,
+        "stormguard_dema_fast": STORMGUARD_DEMA_FAST,
+        "stormguard_dema_slow": STORMGUARD_DEMA_SLOW,
+        "stormguard_obv_sma": STORMGUARD_OBV_SMA,
+        "stormguard_vix_sma": STORMGUARD_VIX_SMA,
+        "polymorphic_metric": POLYMORPHIC_METRIC,
+        "polymorphic_initial_years": POLYMORPHIC_INITIAL_YEARS,
+        "polymorphic_reeval_years": POLYMORPHIC_REEVAL_YEARS,
+        "polymorphic_fallback_momentum": POLYMORPHIC_FALLBACK_MOMENTUM,
+        "polymorphic_min_history_years": POLYMORPHIC_MIN_HISTORY_YEARS,
         "universes": UNIVERSES,
+        "safe_assets": SAFE_ASSETS,
         "data_dir": DATA_DIR,
         "cache_enabled": CACHE_ENABLED,
         "market_calendar": MARKET_CALENDAR,
@@ -119,4 +189,3 @@ def get_config() -> Dict[str, Any]:
         "commission_pct": COMMISSION_PCT,
         "slippage_pct": SLIPPAGE_PCT,
     }
-

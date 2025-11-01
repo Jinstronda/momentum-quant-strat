@@ -61,7 +61,8 @@ class DataLoader:
         symbol: str,
         start_date: datetime,
         end_date: datetime,
-        force_refresh: bool = False
+        force_refresh: bool = False,
+        include_volume: bool = False
     ) -> pd.DataFrame:
         """
         Fetch OHLCV data for a single symbol.
@@ -190,3 +191,27 @@ class DataLoader:
                 close_prices[symbol] = universe_data[(symbol, 'Close')]
         
         return close_prices
+    
+    def get_symbol_with_volume(
+        self,
+        symbol: str,
+        start_date: datetime,
+        end_date: datetime,
+        force_refresh: bool = False
+    ) -> tuple:
+        """
+        Get close prices and volume for a single symbol.
+        
+        Used for StormGuard filter components (SPY, VIX).
+        
+        Args:
+            symbol: Ticker symbol
+            start_date: Start date for data
+            end_date: End date for data
+            force_refresh: Force download even if cached
+            
+        Returns:
+            Tuple of (close_prices: pd.Series, volume: pd.Series)
+        """
+        df = self.fetch_symbol(symbol, start_date, end_date, force_refresh)
+        return df['Close'], df['Volume']

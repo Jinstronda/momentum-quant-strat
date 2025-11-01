@@ -3,7 +3,7 @@
 import sys
 import os
 from typing import Dict
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import pandas as pd
 
@@ -43,21 +43,66 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
     print(f"{'='*80}\n")
     
     try:
-        # Step 1: Load data
+        # Step 1: Load data and check inception dates
         print("Step 1/6: Loading price data...")
         loader = DataLoader(data_dir=data_dir, cache_enabled=cache_enabled)
-        prices = loader.get_close_prices(
+        
+        # Load a wider date range to find asset inception dates
+        extended_start = datetime(start_date.year - 10, 1, 1)
+        prices_full = loader.get_close_prices(
             symbols=symbols,
-            start_date=start_date,
+            start_date=extended_start,
             end_date=end_date,
             force_refresh=False
         )
-        print(f"[OK] Loaded {len(prices)} days of data for {len(prices.columns)} symbols\n")
+        
+        # Find earliest date with valid data for ALL assets
+        first_valid_dates = []
+        for col in prices_full.columns:
+            first_valid = prices_full[col].first_valid_index()
+            if first_valid is not None:
+                first_valid_dates.append(first_valid)
+        
+        earliest_inception = max(first_valid_dates) if first_valid_dates else start_date
+        
+        # Check if we have enough history for polymorphic
+        actual_start_date = start_date
+        actual_momentum_type = config.get('momentum_type', 'ROC')
+        
+        if actual_momentum_type == 'POLYMORPHIC':
+            min_history_years = config.get('polymorphic_min_history_years', 5)
+            required_history_start = start_date - timedelta(days=min_history_years * 365)
+            
+            if earliest_inception > required_history_start:
+                # Insufficient history for polymorphic
+                years_available = (start_date - earliest_inception).days / 365
+                print(f"\n[WARNING] Insufficient history for POLYMORPHIC mode")
+                print(f"          Earliest asset inception: {earliest_inception.date()}")
+                print(f"          Available history: {years_available:.1f} years")
+                print(f"          Required: {min_history_years} years before {start_date.date()}")
+                
+                # Option 1: Adjust start date forward
+                adjusted_start = earliest_inception + timedelta(days=min_history_years * 365)
+                if adjusted_start < end_date:
+                    print(f"          Adjusting start date to {adjusted_start.date()} (after {min_history_years} years of history)")
+                    actual_start_date = adjusted_start
+                else:
+                    # Option 2: Fall back to simpler momentum
+                    fallback_type = config.get('polymorphic_fallback_momentum', 'ROC')
+                    print(f"          Cannot adjust start date (would exceed end date)")
+                    print(f"          Falling back to {fallback_type} momentum\n")
+                    actual_momentum_type = fallback_type
+        
+        # Trim prices to actual date range
+        prices = prices_full[(prices_full.index >= actual_start_date) & (prices_full.index <= end_date)]
+        print(f"[OK] Loaded {len(prices)} days of data for {len(prices.columns)} symbols")
+        print(f"     Date range: {prices.index[0].date()} to {prices.index[-1].date()}")
+        print(f"     Earliest inception: {earliest_inception.date()}\n")
         
         # Step 2: Create rebalance schedule
         print("Step 2/6: Creating rebalance schedule...")
         schedule = create_rebalance_schedule(
-            start_date=start_date,
+            start_date=actual_start_date,
             end_date=end_date,
             frequency=config.get('rebalance_frequency', 'weekly'),
             weekday=rebalance_weekday,
@@ -69,29 +114,118 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
         # Step 3: Generate trading signals
         print("Step 3/6: Generating trading signals...")
         strategy = MomentumStrategy(
-            momentum_type=config.get('momentum_type', 'ROC'),
+            momentum_type=actual_momentum_type,
             momentum_period=config.get('momentum_period', 21),
             top_n=top_n,
-            use_ma_filter=config.get('use_ma_filter', False),
+            filter_type=config.get('filter_type', 'NONE'),
             ema_short=config.get('ema_short_period', 20),
             ema_long=config.get('ema_long_period', 50),
-            ema_derivative_lookback=config.get('ema_derivative_lookback', 10)
+            ema_derivative_lookback=config.get('ema_derivative_lookback', 10),
+            safety_sma_short=config.get('safety_sma_short', 50),
+            safety_sma_long=config.get('safety_sma_long', 200),
+            stormguard_dema_fast=config.get('stormguard_dema_fast', 50),
+            stormguard_dema_slow=config.get('stormguard_dema_slow', 100),
+            stormguard_obv_sma=config.get('stormguard_obv_sma', 50),
+            stormguard_vix_sma=config.get('stormguard_vix_sma', 50),
+            polymorphic_metric=config.get('polymorphic_metric', 'Sharpe'),
+            polymorphic_initial_years=config.get('polymorphic_initial_years', 5),
+            polymorphic_reeval_years=config.get('polymorphic_reeval_years', 2),
+            initial_capital=initial_capital
         )
-        positions = strategy.generate_rebalance_positions(prices, schedule)
         
-        # Count cash positions (None values)
+        # Get SPY, safe assets, volume, VIX if needed for filters
+        spy_prices = None
+        safe_prices = None
+        spy_volume = None
+        vix_prices = None
+        
+        if config.get('filter_type') == 'SAFETY_SWITCH':
+            # Load SPY if not in universe (needed for market regime check)
+            if 'SPY' in prices.columns:
+                spy_prices = prices['SPY']
+            else:
+                print("Loading SPY for Safety Switch filter...")
+                spy_df = loader.get_close_prices(['SPY'], extended_start, end_date)
+                spy_prices = spy_df['SPY']
+                print("[OK] SPY loaded\n")
+            
+            # Load safe assets for bear market rotation
+            safe_assets = config.get('safe_assets', [])
+            if safe_assets:
+                print(f"Loading {len(safe_assets)} safe assets for bear market rotation...")
+                safe_prices = loader.get_close_prices(safe_assets, extended_start, end_date)
+                print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
+        
+        elif config.get('filter_type') == 'STORMGUARD':
+            print("Loading data for STORMGUARD 3-component filter...")
+            
+            # Load SPY with volume
+            print("  Component 1: Price Trend (DEMA) - loading SPY...")
+            print("  Component 2: Money Flow (OBV) - loading SPY volume...")
+            spy_prices, spy_volume = loader.get_symbol_with_volume('SPY', extended_start, end_date)
+            
+            # Load VIX
+            print("  Component 3: Sentiment (VIX) - loading VIX...")
+            vix_prices, _ = loader.get_symbol_with_volume('^VIX', extended_start, end_date)
+            
+            print("[OK] Loaded SPY (price + volume) and VIX\n")
+            
+            # Load safe assets for bear market rotation
+            safe_assets = config.get('safe_assets', [])
+            if safe_assets:
+                print(f"Loading {len(safe_assets)} safe assets for bear market rotation...")
+                safe_prices = loader.get_close_prices(safe_assets, extended_start, end_date)
+                print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
+        
+        positions = strategy.generate_rebalance_positions(
+            prices, schedule, spy_prices, safe_prices, spy_volume, vix_prices
+        )
+        
+        # Get filter history if using polymorphic momentum
+        filter_history = strategy.get_filter_history()
+        
+        # Count cash positions
         cash_positions = positions['position'].isna().sum()
         invested_positions = len(positions) - cash_positions
         
-        if config.get('use_ma_filter', False):
-            ema_short = config.get('ema_short_period', 20)
-            ema_long = config.get('ema_long_period', 50)
-            ema_derivative_lookback = config.get('ema_derivative_lookback', 10)
-            print(f"[OK] Generated positions for {len(positions)} rebalance dates")
-            print(f"     Dual EMA Filter: {ema_short}d/{ema_long}d (derivative: {ema_derivative_lookback}d)")
-            print(f"     Invested: {invested_positions} | Cash: {cash_positions}\n")
+        print(f"[OK] Generated positions for {len(positions)} rebalance dates")
+        if actual_momentum_type == 'POLYMORPHIC':
+            print(f"     Momentum: POLYMORPHIC (metric: {config['polymorphic_metric']})")
+            if filter_history is not None and not filter_history.empty:
+                print(f"     Filter changes: {len(filter_history)} re-evaluations")
+                # Show filter distribution
+                filter_counts = filter_history['filter_type'].value_counts()
+                print(f"     Filter usage: {dict(filter_counts)}")
         else:
-            print(f"[OK] Generated positions for {len(positions)} rebalance dates\n")
+            print(f"     Momentum: {actual_momentum_type} ({config.get('momentum_period')}d)")
+        
+        filter_type = config.get('filter_type', 'NONE')
+        if filter_type == 'DUAL_EMA':
+            print(f"     Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, derivative: {config['ema_derivative_lookback']}d)")
+        elif filter_type == 'SAFETY_SWITCH':
+            print(f"     Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)")
+            if config.get('safe_assets'):
+                # Count safe asset positions
+                safe_symbols = set(config.get('safe_assets', []))
+                safe_positions = positions['position'].isin(safe_symbols).sum()
+                risk_positions = invested_positions - safe_positions
+                print(f"     Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
+        elif filter_type == 'STORMGUARD':
+            print(f"     Filter: STORMGUARD 3-Component")
+            print(f"       1. Price Trend: DEMA({config['stormguard_dema_fast']}/{config['stormguard_dema_slow']})")
+            print(f"       2. Money Flow: OBV > SMA({config['stormguard_obv_sma']})")
+            print(f"       3. Sentiment: VIX < VIX_SMA({config['stormguard_vix_sma']})")
+            if config.get('safe_assets'):
+                # Count safe asset positions
+                safe_symbols = set(config.get('safe_assets', []))
+                safe_positions = positions['position'].isin(safe_symbols).sum()
+                risk_positions = invested_positions - safe_positions
+                print(f"     Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
+        else:
+            print(f"     Filter: NONE")
+        if filter_type not in ['SAFETY_SWITCH', 'STORMGUARD'] or not config.get('safe_assets'):
+            print(f"     Invested: {invested_positions} | Cash: {cash_positions}")
+        print()
         
         # Step 4: Run backtest
         print("Step 4/6: Running backtest...")
@@ -134,8 +268,13 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             metrics=metrics,
             universe_name=universe_name,
             prices=prices,
-            momentum_type=config.get('momentum_type', 'ROC'),
-            momentum_period=config.get('momentum_period', 21)
+            momentum_type=actual_momentum_type,
+            momentum_period=config.get('momentum_period', 21),
+            filter_history=filter_history,
+            spy_prices=spy_prices,
+            spy_volume=spy_volume,
+            vix_prices=vix_prices,
+            config=config
         )
         
         # Generate benchmark reports
@@ -230,15 +369,17 @@ def main():
     print(f"  Rebalance: {config['rebalance_frequency'].capitalize()}", end="")
     if config['rebalance_frequency'] == 'weekly':
         print(f" ({'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])})")
-    
-    # Show EMA filter status
-    if config.get('use_ma_filter', False):
-        ema_short = config.get('ema_short_period', 20)
-        ema_long = config.get('ema_long_period', 50)
-        print(f"  EMA Filter: ENABLED ({ema_short}d/{ema_long}d)")
-        print(f"              Rules: Price > {ema_short}d EMA, {ema_short}d > {ema_long}d EMA, {ema_long}d EMA slope > 0")
     else:
-        print(f"  EMA Filter: DISABLED")
+        print()
+    
+    # Show filter status
+    filter_type = config.get('filter_type', 'NONE')
+    if filter_type == 'DUAL_EMA':
+        print(f"  Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, {config['ema_derivative_lookback']}d slope)")
+    elif filter_type == 'SAFETY_SWITCH':
+        print(f"  Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)")
+    else:
+        print(f"  Filter: NONE")
     
     print(f"  Initial Capital: ${config['initial_capital']:,.0f}")
     print(f"  Commission: {config['commission_pct']*100:.2f}%")
@@ -279,11 +420,15 @@ def main():
         else:
             f.write("\n")
         f.write(f"Market: {config.get('market_calendar', 'NYSE')}\n")
-        
-        if config.get('use_ma_filter', False):
-            f.write(f"EMA Filter: ENABLED ({config['ema_short_period']}d/{config['ema_long_period']}d, derivative: {config['ema_derivative_lookback']}d)\n")
+        filter_type = config.get('filter_type', 'NONE')
+        if filter_type == 'DUAL_EMA':
+            f.write(f"Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, derivative: {config['ema_derivative_lookback']}d)\n")
+        elif filter_type == 'SAFETY_SWITCH':
+            f.write(f"Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)\n")
+            if config.get('safe_assets'):
+                f.write(f"Safe Assets: {', '.join(config['safe_assets'])}\n")
         else:
-            f.write(f"EMA Filter: DISABLED\n")
+            f.write(f"Filter: NONE\n")
         
         f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
         f.write(f"Commission: {config['commission_pct']*100:.2f}%\n")
@@ -306,12 +451,20 @@ def main():
         else:
             f.write("\n")
         f.write(f"Market:          {config.get('market_calendar', 'NYSE')}\n")
-        
-        if config.get('use_ma_filter', False):
-            f.write(f"EMA Filter:      ENABLED ({config['ema_short_period']}d/{config['ema_long_period']}d, {config['ema_derivative_lookback']}d slope)\n")
-            f.write(f"                 Rules: Price>{config['ema_short_period']}d, {config['ema_short_period']}d>{config['ema_long_period']}d, {config['ema_long_period']}d slope>0\n")
+        filter_type = config.get('filter_type', 'NONE')
+        if filter_type == 'DUAL_EMA':
+            f.write(f"Filter:          Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, {config['ema_derivative_lookback']}d slope)\n")
+            f.write(f"                 Price>{config['ema_short_period']}d, {config['ema_short_period']}d>{config['ema_long_period']}d, {config['ema_long_period']}d slope>0\n")
+        elif filter_type == 'SAFETY_SWITCH':
+            f.write(f"Filter:          Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)\n")
+            f.write(f"                 Bull: SPY.SMA({config['safety_sma_short']}) > SMA({config['safety_sma_long']}) -> Trade risk assets\n")
+            if config.get('safe_assets'):
+                f.write(f"                 Bear: SPY.SMA({config['safety_sma_short']}) < SMA({config['safety_sma_long']}) -> Rotate to safe assets\n")
+                f.write(f"                 Safe Assets: {', '.join(config['safe_assets'][:3])}{'...' if len(config['safe_assets']) > 3 else ''}\n")
+            else:
+                f.write(f"                 Bear: SPY.SMA({config['safety_sma_short']}) < SMA({config['safety_sma_long']}) -> CASH\n")
         else:
-            f.write(f"EMA Filter:      DISABLED\n")
+            f.write(f"Filter:          NONE\n")
         
         f.write(f"\n")
         f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
@@ -362,9 +515,14 @@ def main():
             f.write(f"- Universe: {universe_name}\n")
             f.write(f"- Momentum: {config['momentum_type']} ({config['momentum_period']}d)\n")
             f.write(f"- Rebalance: {config['rebalance_frequency']}\n")
-            f.write(f"- EMA Filter: {'ON' if config.get('use_ma_filter') else 'OFF'}")
-            if config.get('use_ma_filter'):
+            filter_type = config.get('filter_type', 'NONE')
+            f.write(f"- Filter: {filter_type}")
+            if filter_type == 'DUAL_EMA':
                 f.write(f" ({config['ema_short_period']}/{config['ema_long_period']}/{config['ema_derivative_lookback']}d)")
+            elif filter_type == 'SAFETY_SWITCH':
+                f.write(f" (SPY {config['safety_sma_short']}/{config['safety_sma_long']}d)")
+                if config.get('safe_assets'):
+                    f.write(f" + {len(config['safe_assets'])} safe assets")
             f.write("\n\n")
             f.write(f"**Results:**\n")
             f.write(f"- CAGR: {final_metrics.get('CAGR (%)', 0):.2f}%\n")

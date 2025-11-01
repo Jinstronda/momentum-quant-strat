@@ -1,0 +1,15 @@
+Run Name: 20251101_201349_US_Large_Cap_POLYMORPHIC63d_W_Top1
+Timestamp: 20251101_201349
+Universe: US_Large_Cap
+Symbols: DIA, QQQ, VTV, VUG, XLB, XLE, XLF, XLI, XLK, XLY
+Start Date: 2005-01-01
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Weekly (Monday)
+Market: NYSE
+Filter: Safety Switch (SPY 50d/200d SMA)
+Safe Assets: SHY, VGSH, AGG, BND, IEI, TIPX, BLV, IEF, TLH, TLT, ZROZ, GLD
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

@@ -12,12 +12,7 @@ class BacktestReporter:
     """Generate reports and visualizations for backtest results."""
     
     def __init__(self, output_dir: str = "output"):
-        """
-        Initialize reporter.
-        
-        Args:
-            output_dir: Directory for saving output files
-        """
+        """Initialize reporter with output directory."""
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
@@ -80,28 +75,141 @@ class BacktestReporter:
         equity_curve.to_csv(output_path)
         print(f"Equity curve saved to {output_path}")
     
+    def save_filter_history(
+        self,
+        filter_history: pd.DataFrame,
+        filename: str = "filter_history.csv"
+    ) -> None:
+        """
+        Save polymorphic filter history to CSV.
+    
+    Args:
+            filter_history: DataFrame with filter selection history
+            filename: Output filename
+        """
+        if filter_history is None or filter_history.empty:
+            print("No filter history to save (not using polymorphic momentum)")
+            return
+        
+        output_path = self.output_dir / filename
+        filter_history.to_csv(output_path, index=False)
+        print(f"Filter history saved to {output_path}")
+    
     def plot_equity_curve(
         self,
         equity_curve: pd.DataFrame,
         title: str = "Equity Curve",
         filename: str = "equity_curve.png",
-        show_initial: bool = True
+        show_initial: bool = True,
+        filter_history: Optional[pd.DataFrame] = None
     ) -> None:
         """
-        Plot and save equity curve with color-coded positions.
-        
-        Args:
+        Plot and save equity curve with color-coded positions or filters.
+    
+    Args:
             equity_curve: DataFrame with 'equity' and 'position' columns
             title: Plot title
             filename: Output filename
             show_initial: Show initial capital line
+            filter_history: Optional filter history for polymorphic color-coding
         """
         fig, ax = plt.subplots(figsize=(16, 8))
         
         equity = equity_curve['equity']
         
-        # Check if position data is available
-        if 'position' in equity_curve.columns:
+        # POLYMORPHIC: Color by filter type instead of position
+        if filter_history is not None and not filter_history.empty:
+            # Define colors for different filter types
+            filter_colors = {
+                'EMA(12)': '#FF6B6B',      # Red
+                'EMA(25)': '#FF8E53',      # Orange
+                'EMA(45)': '#FFB84D',      # Light Orange
+                'EMA(63)': '#FFD93D',      # Yellow
+                'Double_EMA(12)': '#6BCF7F', # Green
+                'Double_EMA(25)': '#4ECDC4', # Teal
+                'Double_EMA(45)': '#45B7D1', # Light Blue
+                'Double_EMA(63)': '#4D96FF', # Blue
+                'Double_EMA(75)': '#5F72BD', # Dark Blue
+                'Double_EMA(90)': '#6C5CE7', # Purple
+                'Double_EMA(105)': '#A29BFE', # Light Purple
+                'Double_EMA(120)': '#B19CD9', # Lavender
+                'TEMA(12)': '#FD79A8',     # Pink
+                'TEMA(25)': '#FDCB6E',     # Peach
+                'TEMA(45)': '#E17055',     # Terracotta
+                'TEMA(63)': '#D63031',     # Dark Red
+                'TEMA(75)': '#00B894',     # Mint
+                'TEMA(90)': '#00CEC9',     # Cyan
+                'TEMA(105)': '#0984E3',    # Ocean Blue
+                'TEMA(120)': '#6C5CE7',    # Violet
+            }
+            
+            # Create filter name mapping
+            filter_history_copy = filter_history.copy()
+            filter_history_copy['filter_name'] = (
+                filter_history_copy['filter_type'] + '(' + 
+                filter_history_copy['filter_period'].astype(str) + ')'
+            )
+            filter_history_copy['date'] = pd.to_datetime(filter_history_copy['date'])
+            
+            # Plot equity curve with color changes based on active filter
+            prev_filter = None
+            segment_start = 0
+            legend_filters = set()
+            
+            # Build a mapping of dates to filters
+            date_to_filter = {}
+            for i in range(len(filter_history_copy)):
+                start_date = filter_history_copy.iloc[i]['date']
+                filter_name = filter_history_copy.iloc[i]['filter_name']
+                # Find end date (next filter change or end of data)
+                if i < len(filter_history_copy) - 1:
+                    end_date = filter_history_copy.iloc[i + 1]['date']
+                else:
+                    end_date = equity.index[-1]
+                
+                # Assign this filter to all dates in range
+                for date in equity.index:
+                    if start_date <= date < end_date:
+                        date_to_filter[date] = filter_name
+                    elif i == len(filter_history_copy) - 1 and date >= start_date:
+                        # Last filter extends to end
+                        date_to_filter[date] = filter_name
+            
+            # Plot segments by filter
+            for i in range(len(equity)):
+                current_filter = date_to_filter.get(equity.index[i])
+                is_last = (i == len(equity) - 1)
+                
+                # Check if filter changed
+                filter_changed = (current_filter != prev_filter)
+                
+                # Plot segment when filter changes or at end
+                if (filter_changed or is_last) and segment_start < i:
+                    filter_name = prev_filter if prev_filter else current_filter
+                    color = filter_colors.get(filter_name, '#808080')
+                    
+                    # Only label if we haven't seen this filter before
+                    use_label = filter_name not in legend_filters
+                    if use_label:
+                        legend_filters.add(filter_name)
+                    
+                    ax.plot(
+                        equity.index[segment_start:i+1],
+                        equity.values[segment_start:i+1],
+                        linewidth=2.5,
+                        color=color,
+                        label=filter_name if use_label else ""
+                    )
+                    
+                    if filter_changed:
+                        segment_start = i
+                        prev_filter = current_filter
+            
+            # Add legend
+            ax.legend(loc='upper left', title='Active Filter', fontsize=9, ncol=2)
+        
+        # Regular: Color by position (stock/ETF held)
+        elif 'position' in equity_curve.columns:
             # Define color palette for different positions
             position_colors = {
                 # CASH position (when None) - BLACK to stand out
@@ -132,6 +240,18 @@ class BacktestReporter:
                 'SPDW': '#9edae5',  # Light Cyan
                 'VEA': '#ff6b6b',   # Coral Red
                 'GLD': '#ffd700',   # Gold
+                # Safe Assets (Bonds - Blue shades)
+                'SHY': '#4169E1',   # Royal Blue
+                'VGSH': '#5B9BD5',  # Medium Blue
+                'AGG': '#7BAFD4',   # Light Steel Blue
+                'BND': '#9FC5E8',   # Powder Blue
+                'IEI': '#6495ED',   # Cornflower Blue
+                'TIPX': '#00BFFF',  # Deep Sky Blue
+                'BLV': '#87CEEB',   # Sky Blue
+                'IEF': '#ADD8E6',   # Light Blue
+                'TLH': '#B0C4DE',   # Light Steel Blue
+                'TLT': '#B0E0E6',   # Powder Blue
+                'ZROZ': '#AFEEEE',  # Pale Turquoise
             }
             
             # Get unique positions (including None for CASH)
@@ -237,8 +357,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot and save drawdown chart.
-        
-        Args:
+    
+    Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -292,14 +412,7 @@ class BacktestReporter:
         title: str = "Daily Returns Distribution",
         filename: str = "returns_distribution.png"
     ) -> None:
-        """
-        Plot distribution of daily returns.
-        
-        Args:
-            equity_curve: DataFrame with 'equity' column
-            title: Plot title
-            filename: Output filename
-        """
+        """Plot distribution of daily returns."""
         daily_returns = equity_curve['equity'].pct_change().dropna() * 100
         
         fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
@@ -338,8 +451,8 @@ class BacktestReporter:
     ) -> None:
         """
         Plot monthly returns as a heatmap.
-        
-        Args:
+    
+    Args:
             equity_curve: DataFrame with 'equity' column
             title: Plot title
             filename: Output filename
@@ -352,16 +465,16 @@ class BacktestReporter:
         monthly_returns = equity_curve['returns'].resample('ME').apply(
             lambda x: (1 + x).prod() - 1
         ) * 100
-        
-        # Create pivot table for heatmap
+    
+    # Create pivot table for heatmap
         monthly_returns_df = pd.DataFrame(monthly_returns)
         monthly_returns_df['Year'] = monthly_returns_df.index.year
         monthly_returns_df['Month'] = monthly_returns_df.index.month
         
         pivot = monthly_returns_df.pivot(index='Year', columns='Month', values='returns')
         pivot.columns = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        
+                   'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    
         # Create heatmap
         fig, ax = plt.subplots(figsize=(14, 8))
         
@@ -433,8 +546,178 @@ class BacktestReporter:
         output_path = self.output_dir / filename
         plt.savefig(output_path, dpi=300, bbox_inches='tight')
         plt.close()
-        
+
         print(f"Momentum over time plot saved to {output_path}")
+    
+    def plot_filter_timeline(
+        self,
+        filter_history: pd.DataFrame,
+        equity_curve: pd.DataFrame,
+        title: str = "Polymorphic Filter Timeline",
+        filename: str = "filter_timeline.png"
+    ) -> None:
+        """
+        Plot timeline showing which filter was active over time.
+        
+        Shows filter changes as vertical bands on equity curve background.
+        
+        Args:
+            filter_history: DataFrame with filter history
+            equity_curve: DataFrame with equity curve
+            title: Plot title
+            filename: Output filename
+        """
+        if filter_history is None or filter_history.empty:
+            print("No filter history to plot (not using polymorphic momentum)")
+            return
+        
+        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(16, 10), 
+                                       gridspec_kw={'height_ratios': [3, 1]})
+        
+        # Top panel: Equity curve with filter change markers
+        ax1.plot(equity_curve.index, equity_curve['equity'], 
+                linewidth=2, color='#2E86AB', label='Equity')
+        
+        # Add vertical lines at filter changes
+        filter_changes = filter_history[filter_history['is_reeval'] == True]
+        for _, row in filter_changes.iterrows():
+            date = pd.to_datetime(row['date'])
+            if date in equity_curve.index:
+                ax1.axvline(x=date, color='red', linestyle='--', alpha=0.5, linewidth=1)
+        
+        ax1.set_title(title, fontsize=16, fontweight='bold', pad=20)
+        ax1.set_ylabel('Equity ($)', fontsize=12)
+        ax1.grid(True, alpha=0.3)
+        ax1.legend(loc='upper left', fontsize=10)
+        
+        # Bottom panel: Filter type bars
+        # Create categorical encoding for filter names
+        filter_history_copy = filter_history.copy()
+        filter_history_copy['filter_name'] = (
+            filter_history_copy['filter_type'] + '(' + 
+            filter_history_copy['filter_period'].astype(str) + ')'
+        )
+        
+        unique_filters = filter_history_copy['filter_name'].unique()
+        filter_to_num = {f: i for i, f in enumerate(unique_filters)}
+        filter_history_copy['filter_num'] = filter_history_copy['filter_name'].map(filter_to_num)
+        
+        # Plot as step function
+        dates = pd.to_datetime(filter_history_copy['date'])
+        ax2.step(dates, filter_history_copy['filter_num'], 
+                where='post', linewidth=2, color='#A23B72')
+        
+        # Add markers for re-evaluations
+        reeval_mask = filter_history_copy['is_reeval'] == True
+        ax2.scatter(dates[reeval_mask], filter_history_copy.loc[reeval_mask, 'filter_num'],
+                   color='red', s=100, marker='o', zorder=5, label='Re-evaluation')
+        
+        ax2.set_ylabel('Active Filter', fontsize=12)
+        ax2.set_xlabel('Date', fontsize=12)
+        ax2.set_yticks(range(len(unique_filters)))
+        ax2.set_yticklabels(unique_filters, fontsize=9)
+        ax2.grid(True, alpha=0.3, axis='x')
+        ax2.legend(loc='upper left', fontsize=9)
+        
+        plt.tight_layout()
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"Filter timeline plot saved to {output_path}")
+    
+    def plot_stormguard_signals(
+        self,
+        spy_prices: pd.Series,
+        spy_volume: pd.Series,
+        vix_prices: pd.Series,
+        equity_curve: pd.DataFrame,
+        config: Dict,
+        title: str = "STORMGUARD 3-Component Analysis",
+        filename: str = "stormguard_signals.png"
+    ) -> None:
+        """
+        Plot 3-panel STORMGUARD component analysis.
+        
+        Shows all 3 components with bullish/bearish zones.
+    
+    Args:
+            spy_prices: SPY price series
+            spy_volume: SPY volume series
+            vix_prices: VIX price series
+            equity_curve: Equity curve for overlay
+            config: Configuration dict with STORMGUARD parameters
+            title: Plot title
+            filename: Output filename
+        """
+        from src.indicators import (
+            check_dema_price_trend, check_obv_money_flow, check_vix_sentiment,
+            calculate_double_ema, calculate_obv
+        )
+        
+        fig, axes = plt.subplots(3, 1, figsize=(16, 12), 
+                                gridspec_kw={'height_ratios': [1, 1, 1]})
+        
+        # Component 1: Price Trend (DEMA crossover)
+        prices_df = spy_prices.to_frame()
+        dema_fast = calculate_double_ema(prices_df, config['stormguard_dema_fast']).iloc[:, 0]
+        dema_slow = calculate_double_ema(prices_df, config['stormguard_dema_slow']).iloc[:, 0]
+        
+        axes[0].plot(spy_prices.index, dema_fast, linewidth=2, 
+                    label=f"DEMA({config['stormguard_dema_fast']})", color='#2E86AB')
+        axes[0].plot(spy_prices.index, dema_slow, linewidth=2, 
+                    label=f"DEMA({config['stormguard_dema_slow']})", color='#A23B72')
+        axes[0].fill_between(spy_prices.index, dema_fast, dema_slow,
+                            where=(dema_fast > dema_slow), alpha=0.2, color='green', label='Bullish')
+        axes[0].fill_between(spy_prices.index, dema_fast, dema_slow,
+                            where=(dema_fast <= dema_slow), alpha=0.2, color='red', label='Bearish')
+        axes[0].set_title('Component 1: Price Trend (DEMA Crossover)', fontweight='bold')
+        axes[0].set_ylabel('SPY Price ($)', fontsize=10)
+        axes[0].legend(loc='upper left', fontsize=9)
+        axes[0].grid(True, alpha=0.3)
+        
+        # Component 2: Money Flow (OBV)
+        obv = calculate_obv(spy_prices, spy_volume)
+        obv_sma = obv.rolling(window=config['stormguard_obv_sma'], 
+                             min_periods=config['stormguard_obv_sma']).mean()
+        
+        axes[1].plot(spy_prices.index, obv, linewidth=1.5, 
+                    label='OBV', color='#2E86AB', alpha=0.7)
+        axes[1].plot(spy_prices.index, obv_sma, linewidth=2, 
+                    label=f"OBV_SMA({config['stormguard_obv_sma']})", color='#A23B72')
+        axes[1].fill_between(spy_prices.index, obv.min(), obv.max(),
+                            where=(obv > obv_sma), alpha=0.1, color='green')
+        axes[1].fill_between(spy_prices.index, obv.min(), obv.max(),
+                            where=(obv <= obv_sma), alpha=0.1, color='red')
+        axes[1].set_title('Component 2: Money Flow (On-Balance Volume)', fontweight='bold')
+        axes[1].set_ylabel('OBV', fontsize=10)
+        axes[1].legend(loc='upper left', fontsize=9)
+        axes[1].grid(True, alpha=0.3)
+        
+        # Component 3: Sentiment (VIX adaptive)
+        vix_sma = vix_prices.rolling(window=config['stormguard_vix_sma'],
+                                    min_periods=config['stormguard_vix_sma']).mean()
+        
+        axes[2].plot(vix_prices.index, vix_prices, linewidth=1.5, 
+                    label='VIX', color='#D62728', alpha=0.8)
+        axes[2].plot(vix_prices.index, vix_sma, linewidth=2, 
+                    label=f"VIX_SMA({config['stormguard_vix_sma']})", color='#8B4513')
+        axes[2].fill_between(vix_prices.index, 0, vix_prices.max(),
+                            where=(vix_prices < vix_sma), alpha=0.1, color='green')
+        axes[2].fill_between(vix_prices.index, 0, vix_prices.max(),
+                            where=(vix_prices >= vix_sma), alpha=0.1, color='red')
+        axes[2].set_title('Component 3: Sentiment (VIX Adaptive)', fontweight='bold')
+        axes[2].set_ylabel('VIX', fontsize=10)
+        axes[2].set_xlabel('Date', fontsize=12)
+        axes[2].legend(loc='upper left', fontsize=9)
+        axes[2].grid(True, alpha=0.3)
+        
+        plt.suptitle(title, fontsize=16, fontweight='bold', y=0.995)
+        plt.tight_layout()
+        
+        output_path = self.output_dir / filename
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        plt.close()
+        print(f"STORMGUARD signals plot saved to {output_path}")
     
     def create_full_report(
         self,
@@ -444,7 +727,12 @@ class BacktestReporter:
         universe_name: str = "strategy",
         prices: Optional[pd.DataFrame] = None,
         momentum_type: Optional[str] = None,
-        momentum_period: Optional[int] = None
+        momentum_period: Optional[int] = None,
+        filter_history: Optional[pd.DataFrame] = None,
+        spy_prices: Optional[pd.Series] = None,
+        spy_volume: Optional[pd.Series] = None,
+        vix_prices: Optional[pd.Series] = None,
+        config: Optional[Dict] = None
     ) -> None:
         """
         Generate complete report with all visualizations and data exports.
@@ -457,6 +745,11 @@ class BacktestReporter:
             prices: Optional DataFrame with price data for momentum plot
             momentum_type: Optional momentum indicator type
             momentum_period: Optional momentum period for plot
+            filter_history: Optional filter history for polymorphic momentum
+            spy_prices: Optional SPY prices for STORMGUARD plot
+            spy_volume: Optional SPY volume for STORMGUARD plot
+            vix_prices: Optional VIX prices for STORMGUARD plot
+            config: Optional config dict for STORMGUARD parameters
         """
         print(f"\n{'='*60}")
         print(f"Generating report for {universe_name}")
@@ -467,12 +760,35 @@ class BacktestReporter:
         self.save_trades(trades, f"{universe_name}_trades.csv")
         self.save_equity_curve(equity_curve, f"{universe_name}_equity.csv")
         
+        # Save filter history if using polymorphic momentum
+        if filter_history is not None and not filter_history.empty:
+            self.save_filter_history(filter_history, f"{universe_name}_filter_history.csv")
+        
         # Create plots
-        self.plot_equity_curve(
-            equity_curve,
-            title=f"{universe_name} - Equity Curve",
-            filename=f"{universe_name}_equity_curve.png"
-        )
+        # For POLYMORPHIC: Create TWO equity curve plots
+        if filter_history is not None and not filter_history.empty:
+            # Plot 1: Color-coded by momentum filter
+            self.plot_equity_curve(
+                equity_curve,
+                title=f"{universe_name} - Equity Curve (by Momentum Filter)",
+                filename=f"{universe_name}_equity_curve_by_filter.png",
+                filter_history=filter_history
+            )
+            # Plot 2: Color-coded by asset/stock held (original behavior)
+            self.plot_equity_curve(
+                equity_curve,
+                title=f"{universe_name} - Equity Curve (by Asset Held)",
+                filename=f"{universe_name}_equity_curve_by_asset.png",
+                filter_history=None  # Don't use filter coloring
+            )
+        else:
+            # Regular: Single equity curve by asset
+            self.plot_equity_curve(
+                equity_curve,
+                title=f"{universe_name} - Equity Curve",
+                filename=f"{universe_name}_equity_curve.png",
+                filter_history=None
+            )
         
         self.plot_drawdown(
             equity_curve,
@@ -492,8 +808,30 @@ class BacktestReporter:
             filename=f"{universe_name}_monthly_returns.png"
         )
         
-        # Plot momentum over time if prices provided
-        if prices is not None and momentum_period is not None:
+        # Plot filter timeline if using polymorphic momentum
+        if filter_history is not None and not filter_history.empty:
+            self.plot_filter_timeline(
+                filter_history,
+                equity_curve,
+                title=f"{universe_name} - Polymorphic Filter Timeline",
+                filename=f"{universe_name}_filter_timeline.png"
+            )
+        
+        # Plot STORMGUARD components if using STORMGUARD filter
+        if (config is not None and config.get('filter_type') == 'STORMGUARD' and
+            spy_prices is not None and spy_volume is not None and vix_prices is not None):
+            self.plot_stormguard_signals(
+                spy_prices,
+                spy_volume,
+                vix_prices,
+                equity_curve,
+                config,
+                title=f"{universe_name} - STORMGUARD 3-Component Analysis",
+                filename=f"{universe_name}_stormguard_signals.png"
+            )
+        
+        # Plot momentum over time if prices provided (skip for POLYMORPHIC)
+        if prices is not None and momentum_period is not None and momentum_type != "POLYMORPHIC":
             mom_type = momentum_type if momentum_type else 'ROC'
             self.plot_momentum_over_time(
                 prices,
@@ -518,7 +856,7 @@ class BacktestReporter:
             else:
                 print(f"{key:.<40} {value:>15}")
         print(f"{'='*60}\n")
-        
+
         print(f"Report generation complete for {universe_name}\n")
     
     def plot_strategy_vs_benchmark(

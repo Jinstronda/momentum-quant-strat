@@ -1,0 +1,15 @@
+Run Name: 20251101_194703_Developed_Countries_DEMA63d_W_Top1
+Timestamp: 20251101_194703
+Universe: Developed_Countries
+Symbols: DFIV, EFA, EWA, EWC, EWG, EWJ, EWU, EZU, IEFA, SPDW, VEA, GLD
+Start Date: 2005-01-01
+End Date: 2024-12-31
+Momentum: DEMA (63 days)
+Top N: 1
+Rebalance: Weekly (Monday)
+Market: NYSE
+Filter: Safety Switch (SPY 20d/50d SMA)
+Safe Assets: SHY, VGSH, AGG, BND, IEI, TIPX, BLV, IEF, TLH, TLT, ZROZ, GLD
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

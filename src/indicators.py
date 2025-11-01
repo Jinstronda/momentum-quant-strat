@@ -97,8 +97,32 @@ def get_top_symbol_per_date(
 
 
 def calculate_moving_average(prices: pd.DataFrame, period: int = 200) -> pd.DataFrame:
-    """Calculate simple moving average (only used in tests for comparison)."""
+    """Calculate simple moving average."""
     return prices.rolling(window=period, min_periods=period).mean()
+
+
+def check_market_safety(
+    spy_prices: pd.Series,
+    sma_short: int = 50,
+    sma_long: int = 200
+) -> pd.Series:
+    """
+    Safety Switch: Check if market is in bull regime.
+    
+    Logic: SMA(50) > SMA(200) → Bull (safe to trade)
+           SMA(50) < SMA(200) → Bear (go to cash)
+    
+    Args:
+        spy_prices: SPY price series
+        sma_short: Short SMA period (default 50)
+        sma_long: Long SMA period (default 200)
+        
+    Returns:
+        Boolean series: True = Bull (safe), False = Bear (cash)
+    """
+    sma_50 = spy_prices.rolling(window=sma_short, min_periods=sma_short).mean()
+    sma_200 = spy_prices.rolling(window=sma_long, min_periods=sma_long).mean()
+    return sma_50 > sma_200
 
 
 def calculate_ema(prices: pd.DataFrame, period: int = 20) -> pd.DataFrame:
@@ -153,6 +177,26 @@ def calculate_dema(prices: pd.DataFrame, period: int = 21) -> pd.DataFrame:
     return 2 * ema1 - ema2
 
 
+def calculate_tema(prices: pd.DataFrame, period: int = 21) -> pd.DataFrame:
+    """
+    Calculate TEMA (book's triple smoothing) - EMA(EMA(EMA)).
+    
+    Purpose: Maximum smoothing with triple filtering. Extremely slow response,
+    captures only major long-term trends with minimal noise.
+    
+    Args:
+        prices: DataFrame with symbols as columns, dates as index
+        period: EMA period (default 21 days)
+        
+    Returns:
+        DataFrame with TEMA values (triple smoothed)
+    """
+    ema1 = calculate_ema(prices, period)
+    ema2 = calculate_ema(ema1, period)
+    ema3 = calculate_ema(ema2, period)
+    return ema3
+
+
 def calculate_momentum(
     prices: pd.DataFrame,
     method: str = "ROC",
@@ -161,22 +205,38 @@ def calculate_momentum(
     """
     Calculate momentum using specified method.
     
+    All methods return NORMALIZED percentage values for cross-asset comparison.
+    EMA-based methods calculate percentage change of smoothed prices.
+    
     Args:
         prices: DataFrame with symbols as columns, dates as index
-        method: "ROC", "Double_EMA", or "DEMA"
+        method: "ROC", "EMA", "Double_EMA", "DEMA", or "TEMA"
         period: Lookback period in days
         
     Returns:
-        DataFrame with momentum values
+        DataFrame with momentum values (percentages, normalized across assets)
     """
     if method == "ROC":
+        # Already normalized (percentage change)
         return calculate_roc(prices, period)
+    elif method == "EMA":
+        # Normalize: percentage change of EMA over period
+        ema = calculate_ema(prices, period)
+        return ((ema - ema.shift(period)) / ema.shift(period)) * 100
     elif method == "Double_EMA":
-        return calculate_double_ema(prices, period)
+        # Normalize: percentage change of Double EMA over period
+        double_ema = calculate_double_ema(prices, period)
+        return ((double_ema - double_ema.shift(period)) / double_ema.shift(period)) * 100
     elif method == "DEMA":
-        return calculate_dema(prices, period)
+        # Normalize: percentage change of DEMA over period
+        dema = calculate_dema(prices, period)
+        return ((dema - dema.shift(period)) / dema.shift(period)) * 100
+    elif method == "TEMA":
+        # Normalize: percentage change of TEMA over period
+        tema = calculate_tema(prices, period)
+        return ((tema - tema.shift(period)) / tema.shift(period)) * 100
     else:
-        raise ValueError(f"Unknown momentum method: {method}. Use 'ROC', 'Double_EMA', or 'DEMA'")
+        raise ValueError(f"Unknown momentum method: {method}. Use 'ROC', 'EMA', 'Double_EMA', 'DEMA', or 'TEMA'")
 
 
 def calculate_ema_derivative(ema: pd.DataFrame, lookback: int = 1) -> pd.DataFrame:
@@ -276,3 +336,148 @@ def apply_dual_ema_filter_to_roc(
     return apply_dual_ema_filter_to_momentum(
         prices, "ROC", roc_period, ema_short, ema_long, derivative_lookback
     )
+
+
+def get_polymorphic_filter_bank() -> list:
+    """
+    Generate the 20-filter bank for polymorphic momentum.
+    
+    Returns list of dicts with 'type' and 'period' keys:
+    - 4 EMA filters: periods [12, 25, 45, 63]
+    - 8 DEMA (Double_EMA) filters: periods [12, 25, 45, 63, 75, 90, 105, 120]
+    - 8 TEMA filters: periods [12, 25, 45, 63, 75, 90, 105, 120]
+    
+    Total: 20 filters for automated quarterly selection.
+    """
+    filters = []
+    
+    # 4 EMA filters
+    for period in [12, 25, 45, 63]:
+        filters.append({'type': 'EMA', 'period': period})
+    
+    # 8 DEMA (Double_EMA) filters
+    for period in [12, 25, 45, 63, 75, 90, 105, 120]:
+        filters.append({'type': 'Double_EMA', 'period': period})
+    
+    # 8 TEMA (Triple EMA) filters
+    for period in [12, 25, 45, 63, 75, 90, 105, 120]:
+        filters.append({'type': 'TEMA', 'period': period})
+    
+    return filters
+
+
+# ============================================================================
+# STORMGUARD FILTER COMPONENTS
+# ============================================================================
+
+def check_dema_price_trend(
+    spy_prices: pd.Series,
+    fast_period: int = 50,
+    slow_period: int = 100
+) -> pd.Series:
+    """
+    DEMA-based price trend (smoother than SMA crossover).
+    
+    Uses book's Double EMA for noise reduction.
+    Returns True when DEMA(50) > DEMA(100) → Bullish price trend
+    
+    Args:
+        spy_prices: SPY price series
+        fast_period: Fast DEMA period (default 50)
+        slow_period: Slow DEMA period (default 100)
+        
+    Returns:
+        Boolean series: True = Bullish trend, False = Bearish trend
+    """
+    prices_df = spy_prices.to_frame()
+    
+    dema_fast = calculate_double_ema(prices_df, fast_period).iloc[:, 0]
+    dema_slow = calculate_double_ema(prices_df, slow_period).iloc[:, 0]
+    
+    return dema_fast > dema_slow
+
+
+def calculate_obv(prices: pd.Series, volume: pd.Series) -> pd.Series:
+    """
+    Calculate On-Balance Volume (OBV).
+    
+    OBV is a cumulative indicator that adds volume on up days
+    and subtracts volume on down days. Measures money flow.
+    
+    Formula:
+    - If Close > Previous_Close: OBV = Previous_OBV + Volume
+    - If Close < Previous_Close: OBV = Previous_OBV - Volume
+    - If Close == Previous_Close: OBV = Previous_OBV
+    
+    Args:
+        prices: Price series
+        volume: Volume series
+        
+    Returns:
+        OBV series (cumulative volume flow)
+    """
+    price_change = prices.diff()
+    obv = pd.Series(0.0, index=prices.index, dtype=float)
+    
+    obv.iloc[0] = volume.iloc[0]
+    
+    for i in range(1, len(prices)):
+        if price_change.iloc[i] > 0:
+            obv.iloc[i] = obv.iloc[i-1] + volume.iloc[i]
+        elif price_change.iloc[i] < 0:
+            obv.iloc[i] = obv.iloc[i-1] - volume.iloc[i]
+        else:
+            obv.iloc[i] = obv.iloc[i-1]
+    
+    return obv
+
+
+def check_obv_money_flow(
+    spy_prices: pd.Series,
+    spy_volume: pd.Series,
+    sma_period: int = 50
+) -> pd.Series:
+    """
+    OBV-based money flow check.
+    
+    Returns True when OBV > OBV_SMA(50) → Money flowing into market
+    
+    Args:
+        spy_prices: SPY price series
+        spy_volume: SPY volume series
+        sma_period: SMA period for OBV smoothing (default 50)
+        
+    Returns:
+        Boolean series: True = Money flowing in (bullish), False = Flowing out (bearish)
+    """
+    obv = calculate_obv(spy_prices, spy_volume)
+    obv_sma = obv.rolling(window=sma_period, min_periods=sma_period).mean()
+    
+    return obv > obv_sma
+
+
+def check_vix_sentiment(
+    vix_prices: pd.Series,
+    sma_period: int = 50
+) -> pd.Series:
+    """
+    VIX-based market sentiment with ADAPTIVE threshold.
+    
+    Compares VIX to its own moving average (adapts to volatility regime).
+    Returns True when VIX < VIX_SMA(50) → Fear below recent average (bullish)
+    
+    Why adaptive:
+    - 2017: VIX averaged ~10-12 (low vol regime)
+    - 2020-2022: VIX averaged ~25-30 (high vol regime)
+    - Fixed threshold would miss rallies in high-vol periods
+    - Adaptive detects fear RELATIVE to recent normal
+    
+    Args:
+        vix_prices: VIX price series
+        sma_period: SMA period for adaptive threshold (default 50)
+        
+    Returns:
+        Boolean series: True = Low fear (bullish), False = Elevated fear (bearish)
+    """
+    vix_sma = vix_prices.rolling(window=sma_period, min_periods=sma_period).mean()
+    return vix_prices < vix_sma

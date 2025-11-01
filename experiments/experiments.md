@@ -106,3 +106,174 @@ Each run creates a timestamped folder with the configuration in the name (e.g., 
 - Total Return: 102.14%
 - Path: `output\20251101_191744_US_Large_Cap_Double_EMA63d_M_Top1`
 
+
+## 20251101_192835_US_Large_Cap_Double_EMA63d_M_Top1
+**Date:** 2025-11-01 19:28:52
+
+**Configuration:**
+- Universe: US_Large_Cap
+- Momentum: Double_EMA (63d)
+- Rebalance: monthly
+- Filter: SAFETY_SWITCH (SPY 50/200d SMA)
+
+**Results:**
+- CAGR: 8.72%
+- Sharpe: 0.64
+- Sortino: 0.66
+- Calmar: 0.26
+- Max DD: -33.68%
+- Total Return: 430.63%
+- Path: `output\20251101_192835_US_Large_Cap_Double_EMA63d_M_Top1`
+
+
+## 20251101_193021_US_Large_Cap_Double_EMA63d_M_Top1
+**Date:** 2025-11-01 19:30:38
+
+**Configuration:**
+- Universe: US_Large_Cap
+- Momentum: Double_EMA (63d)
+- Rebalance: monthly
+- Filter: SAFETY_SWITCH (SPY 50/200d SMA)
+
+**Results:**
+- CAGR: 8.72%
+- Sharpe: 0.64
+- Sortino: 0.66
+- Calmar: 0.26
+- Max DD: -33.68%
+- Total Return: 430.63%
+- Path: `output\20251101_193021_US_Large_Cap_Double_EMA63d_M_Top1`
+
+
+## 20251101_193145_US_Large_Cap_Double_EMA63d_W_Top1
+**Date:** 2025-11-01 19:32:28
+
+**Configuration:**
+- Universe: US_Large_Cap
+- Momentum: Double_EMA (63d)
+- Rebalance: weekly
+- Filter: SAFETY_SWITCH (SPY 20/50d SMA)
+
+**Results:**
+- CAGR: 3.84%
+- Sharpe: 0.31
+- Sortino: 0.31
+- Calmar: 0.12
+- Max DD: -32.91%
+- Total Return: 112.39%
+- Path: `output\20251101_193145_US_Large_Cap_Double_EMA63d_W_Top1`
+
+
+## 20251101_194017_Developed_Countries_Double_EMA63d_W_Top1
+**Date:** 2025-11-01 19:41:34
+
+**Configuration:**
+- Universe: Developed_Countries
+- Momentum: Double_EMA (63d)
+- Rebalance: weekly
+- Filter: SAFETY_SWITCH (SPY 20/50d) + 12 safe assets
+
+**Results:**
+- CAGR: 7.52%
+- Sharpe: 0.44
+- Sortino: 0.57
+- Calmar: 0.17
+- Max DD: -45.52%
+- Total Return: 325.68%
+- Path: `output\20251101_194017_Developed_Countries_Double_EMA63d_W_Top1`
+
+
+## 20251101_194703_Developed_Countries_DEMA63d_W_Top1
+**Date:** 2025-11-01 19:48:02
+
+**Configuration:**
+- Universe: Developed_Countries
+- Momentum: DEMA (63d)
+- Rebalance: weekly
+- Filter: SAFETY_SWITCH (SPY 20/50d) + 12 safe assets
+
+**Results:**
+- CAGR: 6.29%
+- Sharpe: 0.37
+- Sortino: 0.48
+- Calmar: 0.13
+- Max DD: -48.30%
+- Total Return: 237.88%
+- Path: `output\20251101_194703_Developed_Countries_DEMA63d_W_Top1`
+
+
+## 20251101_200838_Developed_Countries_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 20:09:09
+
+**Configuration:**
+- Universe: Developed_Countries
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: SAFETY_SWITCH (SPY 50/200d) + 12 safe assets
+
+**Results:**
+- CAGR: 6.91%
+- Sharpe: 0.41
+- Sortino: 0.53
+- Calmar: 0.15
+- Max DD: -47.25%
+- Total Return: 279.52%
+- Path: `output\20251101_200838_Developed_Countries_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_201106_Developed_Countries_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-01 20:11:35
+
+**Configuration:**
+- Universe: Developed_Countries
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: SAFETY_SWITCH (SPY 50/200d) + 12 safe assets
+
+**Results:**
+- CAGR: 2.88%
+- Sharpe: 0.19
+- Sortino: 0.20
+- Calmar: 0.07
+- Max DD: -41.37%
+- Total Return: 76.36%
+- Path: `output\20251101_201106_Developed_Countries_POLYMORPHIC63d_M_Top1`
+
+
+## 20251101_202032_US_Large_Cap_POLYMORPHIC63d_W_Top1
+**Date:** 2025-11-01 20:21:43
+
+**Configuration:**
+- Universe: US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: weekly
+- Filter: SAFETY_SWITCH (SPY 50/200d) + 12 safe assets
+
+**Results:**
+- CAGR: 8.87%
+- Sharpe: 0.63
+- Sortino: 0.64
+- Calmar: 0.24
+- Max DD: -36.66%
+- Total Return: 446.02%
+- Path: `output\20251101_202032_US_Large_Cap_POLYMORPHIC63d_W_Top1`
+
+
+## 20251101_202804_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1
+**Date:** 2025-11-01 20:29:23
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: weekly
+- Filter: SAFETY_SWITCH (SPY 50/200d) + 12 safe assets
+
+**Results:**
+- CAGR: 5.79%
+- Sharpe: 0.30
+- Sortino: 0.35
+- Calmar: 0.17
+- Max DD: -35.08%
+- Total Return: 135.91%
+- Path: `output\20251101_202804_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1`
+

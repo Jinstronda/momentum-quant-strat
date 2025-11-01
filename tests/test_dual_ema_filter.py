@@ -144,7 +144,7 @@ def test_strategy_with_dual_ema_cash_fallback(downtrend_prices):
     strategy = MomentumStrategy(
         momentum_period=21,
         top_n=1,
-        use_ma_filter=True,
+        filter_type="DUAL_EMA",
         ema_short=20,
         ema_long=50
     )
@@ -161,7 +161,7 @@ def test_strategy_with_dual_ema_selects_eligible(mixed_prices):
     strategy = MomentumStrategy(
         momentum_period=21,
         top_n=1,
-        use_ma_filter=True,
+        filter_type="DUAL_EMA",
         ema_short=20,
         ema_long=50
     )
@@ -179,7 +179,7 @@ def test_strategy_without_filter_selects_all(mixed_prices):
     strategy_no_filter = MomentumStrategy(
         momentum_period=21,
         top_n=1,
-        use_ma_filter=False
+        filter_type="NONE"
     )
     
     signal_date = mixed_prices.index[-1]
