@@ -448,3 +448,251 @@ Each run creates a timestamped folder with the configuration in the name (e.g., 
 - Total Return: 149.63%
 - Path: `output\20251101_234225_US_Small_Mid_Cap_POLYMORPHIC63d_M_Top1`
 
+
+## 20251102_000003_US_Tech_Innovation_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 00:00:48
+
+**Configuration:**
+- Universe: US_Tech_Innovation
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 12.20%
+- Sharpe: 0.38
+- Sortino: 0.51
+- Calmar: 0.18
+- Max DD: -68.82%
+- Total Return: 159.49%
+- Path: `output\20251102_000003_US_Tech_Innovation_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_004837_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 00:49:41
+
+**Configuration:**
+- Universe: AI_Emerging_Markets
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 0.50%
+- Sharpe: 0.03
+- Sortino: 0.03
+- Calmar: 0.01
+- Max DD: -49.20%
+- Total Return: 10.49%
+- Path: `output\20251102_004837_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_010031_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 01:01:46
+
+**Configuration:**
+- Universe: AI_Emerging_Markets
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 1.12%
+- Sharpe: 0.06
+- Sortino: 0.07
+- Calmar: 0.02
+- Max DD: -53.46%
+- Total Return: 25.27%
+- Path: `output\20251102_010031_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_010420_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 01:05:41
+
+**Configuration:**
+- Universe: AI_Emerging_Markets
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: -1.76%
+- Sharpe: -0.08
+- Sortino: -0.09
+- Calmar: 0.03
+- Max DD: -53.69%
+- Total Return: -30.18%
+- Path: `output\20251102_010420_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_020458_AI_US_Large_Cap_POLYMORPHIC126d_W_Top1
+**Date:** 2025-11-02 02:10:43
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (126d)
+- Rebalance: weekly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 5.47%
+- Sharpe: 0.32
+- Sortino: 0.37
+- Calmar: 0.13
+- Max DD: -41.97%
+- Total Return: 193.62%
+- Path: `output\20251102_020458_AI_US_Large_Cap_POLYMORPHIC126d_W_Top1`
+
+
+## 20251102_022716_AI_US_Large_Cap_POLYMORPHIC126d_W_Top1
+**Date:** 2025-11-02 02:32:24
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (126d)
+- Rebalance: weekly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 5.47%
+- Sharpe: 0.32
+- Sortino: 0.37
+- Calmar: 0.13
+- Max DD: -41.97%
+- Total Return: 193.62%
+- Path: `output\20251102_022716_AI_US_Large_Cap_POLYMORPHIC126d_W_Top1`
+
+
+## 20251102_023158_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1
+**Date:** 2025-11-02 02:37:06
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: weekly
+- Filter: STORMGUARD
+
+**Results:**
+- CAGR: 5.47%
+- Sharpe: 0.32
+- Sortino: 0.37
+- Calmar: 0.13
+- Max DD: -41.97%
+- Total Return: 193.62%
+- Path: `output\20251102_023158_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1`
+
+
+## 20251102_024327_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 02:44:58
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD_VELOCITY (3-state, Z-score:-2.0, Dwell:10d, Timeout:20d)
+
+**Results:**
+- CAGR: 5.40%
+- Sharpe: 0.36
+- Sortino: 0.38
+- Calmar: 0.21
+- Max DD: -25.25%
+- Total Return: 189.64%
+- Path: `output\20251102_024327_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_024527_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 02:46:56
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD_VELOCITY (3-state, Z-score:-2.0, Dwell:10d, Timeout:20d)
+
+**Results:**
+- CAGR: 8.10%
+- Sharpe: 0.44
+- Sortino: 0.51
+- Calmar: 0.27
+- Max DD: -30.02%
+- Total Return: 383.68%
+- Path: `output\20251102_024527_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_024634_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 02:48:08
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD_VELOCITY (3-state, Z-score:-2.0, Dwell:10d, Timeout:20d)
+
+**Results:**
+- CAGR: 9.00%
+- Sharpe: 0.49
+- Sortino: 0.57
+- Calmar: 0.32
+- Max DD: -28.43%
+- Total Return: 471.74%
+- Path: `output\20251102_024634_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_024657_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 02:48:32
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD_VELOCITY (3-state, Z-score:-2.0, Dwell:10d, Timeout:20d)
+
+**Results:**
+- CAGR: 9.00%
+- Sharpe: 0.49
+- Sortino: 0.57
+- Calmar: 0.32
+- Max DD: -28.43%
+- Total Return: 471.71%
+- Path: `output\20251102_024657_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_024742_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+**Date:** 2025-11-02 02:49:15
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: monthly
+- Filter: STORMGUARD_VELOCITY (3-state, Z-score:-2.0, Dwell:10d, Timeout:20d)
+
+**Results:**
+- CAGR: 9.00%
+- Sharpe: 0.49
+- Sortino: 0.57
+- Calmar: 0.32
+- Max DD: -28.43%
+- Total Return: 471.74%
+- Path: `output\20251102_024742_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1`
+
+
+## 20251102_143335_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1
+**Date:** 2025-11-02 14:39:59
+
+**Configuration:**
+- Universe: AI_US_Large_Cap
+- Momentum: POLYMORPHIC (63d)
+- Rebalance: weekly
+- Filter: STORMGUARD
+- Enhancements: PriceAction(EMA20_LOW)
+
+**Results:**
+- CAGR: 7.23%
+- Sharpe: 0.45
+- Sortino: 0.49
+- Calmar: 0.24
+- Max DD: -29.57%
+- Total Return: 310.17%
+- Path: `output\20251102_143335_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1`
+

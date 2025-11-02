@@ -1,0 +1,14 @@
+Run Name: 20251102_022716_AI_US_Large_Cap_POLYMORPHIC126d_W_Top1
+Timestamp: 20251102_022716
+Universe: AI_US_Large_Cap
+Symbols: VNQ, VTV, VUG, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, SPY
+Start Date: 1995-01-03
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (126 days)
+Top N: 1
+Rebalance: Weekly (Weekday 4)
+Market: NYSE
+Filter: NONE
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

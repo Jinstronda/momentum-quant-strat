@@ -1,6 +1,6 @@
 """Benchmark comparison utilities."""
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Optional
 import pandas as pd
 import numpy as np
 
@@ -86,17 +86,18 @@ class BenchmarkRunner:
         
         return equity_df, trades_df
     
-    def calculate_metrics(self, equity_curve: pd.DataFrame) -> Dict[str, float]:
+    def calculate_metrics(self, equity_curve: pd.DataFrame, trades_df: Optional[pd.DataFrame] = None) -> Dict[str, float]:
         """
         Calculate performance metrics from equity curve.
         
         Args:
             equity_curve: DataFrame with 'equity' column
+            trades_df: Optional DataFrame with trade history
             
         Returns:
             Dictionary of performance metrics
         """
-        return calculate_performance_metrics(equity_curve, self.initial_capital)
+        return calculate_performance_metrics(equity_curve, self.initial_capital, trades_df)
 
 
 def compare_strategies(

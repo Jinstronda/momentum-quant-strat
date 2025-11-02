@@ -14,6 +14,16 @@ from src.strategy import MomentumStrategy
 from src.backtest import BacktestEngine
 from src.reporting import BacktestReporter
 from src.benchmark import BenchmarkRunner, calculate_relative_metrics
+from src.backtest_utils import (
+    load_filter_data,
+    create_strategy_from_config,
+    load_ohlc_if_needed
+)
+from src.run_config_generator import (
+    generate_run_config_file,
+    generate_readme_file,
+    log_to_experiments
+)
 
 
 def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str) -> None:
@@ -93,101 +103,57 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
                     print(f"          Falling back to {fallback_type} momentum\n")
                     actual_momentum_type = fallback_type
         
-        # Trim prices to actual date range
-        prices = prices_full[(prices_full.index >= actual_start_date) & (prices_full.index <= end_date)]
-        print(f"[OK] Loaded {len(prices)} days of data for {len(prices.columns)} symbols")
-        print(f"     Date range: {prices.index[0].date()} to {prices.index[-1].date()}")
-        print(f"     Earliest inception: {earliest_inception.date()}\n")
-        
         # Step 2: Create rebalance schedule
         print("Step 2/6: Creating rebalance schedule...")
+        momentum_period = config.get('momentum_period', 21)
         schedule = create_rebalance_schedule(
             start_date=actual_start_date,
             end_date=end_date,
             frequency=config.get('rebalance_frequency', 'weekly'),
             weekday=rebalance_weekday,
-            lookback_periods=config.get('momentum_period', 21),
+            lookback_periods=momentum_period,
             market=config.get('market_calendar', 'NYSE')
         )
-        print(f"[OK] Generated {len(schedule)} rebalance dates ({config.get('rebalance_frequency', 'weekly')} rebalancing)\n")
+        
+        # Calculate minimum data start date needed for signal calculations
+        if not schedule.empty:
+            min_data_start = schedule['data_start_date'].min()
+            data_lookback_days = momentum_period * 3
+            min_required_date = actual_start_date - timedelta(days=data_lookback_days)
+            prices_start_date = min(min_data_start, min_required_date, earliest_inception)
+        else:
+            data_lookback_days = momentum_period * 3
+            prices_start_date = min(actual_start_date - timedelta(days=data_lookback_days), earliest_inception)
+        
+        prices = prices_full[(prices_full.index >= prices_start_date) & (prices_full.index <= end_date)]
+        print(f"[OK] Generated {len(schedule)} rebalance dates ({config.get('rebalance_frequency', 'weekly')} rebalancing)")
+        print(f"[OK] Loaded {len(prices)} days of data for {len(prices.columns)} symbols")
+        print(f"     Data range: {prices.index[0].date()} to {prices.index[-1].date()}")
+        print(f"     Backtest starts: {actual_start_date.date()}")
+        print(f"     Earliest inception: {earliest_inception.date()}\n")
         
         # Step 3: Generate trading signals
         print("Step 3/6: Generating trading signals...")
-        strategy = MomentumStrategy(
-            momentum_type=actual_momentum_type,
-            momentum_period=config.get('momentum_period', 21),
-            top_n=top_n,
-            filter_type=config.get('filter_type', 'NONE'),
-            ema_short=config.get('ema_short_period', 20),
-            ema_long=config.get('ema_long_period', 50),
-            ema_derivative_lookback=config.get('ema_derivative_lookback', 10),
-            safety_sma_short=config.get('safety_sma_short', 50),
-            safety_sma_long=config.get('safety_sma_long', 200),
-            stormguard_dema_fast=config.get('stormguard_volatility_threshold', 20.0),  # Temporarily reuse param
-            stormguard_dema_slow=100,  # Not used anymore
-            stormguard_obv_sma=50,  # Not used anymore
-            stormguard_vix_sma=50,  # Not used anymore
-            polymorphic_metric=config.get('polymorphic_metric', 'Sharpe'),
-            polymorphic_initial_years=config.get('polymorphic_initial_years', 5),
-            polymorphic_reeval_years=config.get('polymorphic_reeval_years', 2),
-            initial_capital=initial_capital
+        strategy = create_strategy_from_config(config, actual_momentum_type)
+        
+        # Load filter data (SPY, VIX, safe assets, etc.)
+        spy_prices, safe_prices, spy_volume, vix_prices, hyg_prices, ief_prices, rsp_prices = load_filter_data(
+            config, loader, extended_start, end_date
         )
         
-        # Get SPY, safe assets, volume, VIX, NYSE data if needed for filters
-        spy_prices = None
-        safe_prices = None
-        spy_volume = None
-        vix_prices = None
-        nyse_data = None
-        
-        if config.get('filter_type') == 'SAFETY_SWITCH':
-            # Load SPY if not in universe (needed for market regime check)
-            if 'SPY' in prices.columns:
-                spy_prices = prices['SPY']
-            else:
-                print("Loading SPY for Safety Switch filter...")
-                spy_df = loader.get_close_prices(['SPY'], extended_start, end_date)
-                spy_prices = spy_df['SPY']
-                print("[OK] SPY loaded\n")
-            
-            # Load safe assets for bear market rotation
-            safe_assets = config.get('safe_assets', [])
-            if safe_assets:
-                print(f"Loading {len(safe_assets)} safe assets for bear market rotation...")
-                safe_prices = loader.get_close_prices(safe_assets, extended_start, end_date)
-                print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
-        
-        elif config.get('filter_type') == 'STORMGUARD':
-            print("Loading data for STORMGUARD (Adapted Algorithm - SPY + VIX only)...")
-            
-            # Load SPY with volume
-            print("  Metric 1: Price-Trend - 21 × DEMA_50(SPY Returns) + 0.5%")
-            print("  Metric 2: Money Flow - OBV - SMA_50(OBV) using SPY volume...")
-            spy_prices, spy_volume = loader.get_symbol_with_volume('SPY', extended_start, end_date)
-            
-            # Load VIX
-            print("  Metric 3: Sentiment - SMA_50(VIX) - VIX")
-            print("  Metric 4: Volatility Circuit Breaker - (VIX > 40) AND (SPY < SMA_20)")
-            vix_prices, _ = loader.get_symbol_with_volume('^VIX', extended_start, end_date)
-            
-            print("[OK] Loaded SPY (price + volume) and VIX")
-            print("     Using adapted metrics (NYSE data not available on Yahoo Finance)\n")
-            
-            # Load safe assets for bear market rotation
-            safe_assets = config.get('safe_assets', [])
-            if safe_assets:
-                print(f"Loading {len(safe_assets)} safe assets for bear market rotation...")
-                safe_prices = loader.get_close_prices(safe_assets, extended_start, end_date)
-                print(f"[OK] Loaded safe assets: {', '.join(safe_assets)}\n")
+        # Load OHLC data if price action filter enabled
+        prices_ohlc = load_ohlc_if_needed(config, loader, symbols, extended_start, end_date)
         
         positions = strategy.generate_rebalance_positions(
-            prices, schedule, spy_prices, safe_prices, spy_volume, vix_prices, nyse_data
+            prices, schedule, spy_prices, safe_prices, spy_volume, vix_prices, 
+            hyg_prices, ief_prices, rsp_prices, None, prices_ohlc
         )
         
-        # Get filter history if using polymorphic momentum
-        filter_history = strategy.get_filter_history()
+        positions = positions[positions.index >= actual_start_date]
         
-        # Count cash positions
+        filter_history = strategy.get_filter_history()
+        regime_history = strategy.get_regime_history()
+        
         cash_positions = positions['position'].isna().sum()
         invested_positions = len(positions) - cash_positions
         
@@ -196,7 +162,6 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             print(f"     Momentum: POLYMORPHIC (metric: {config['polymorphic_metric']})")
             if filter_history is not None and not filter_history.empty:
                 print(f"     Filter changes: {len(filter_history)} re-evaluations")
-                # Show filter distribution
                 filter_counts = filter_history['filter_type'].value_counts()
                 print(f"     Filter usage: {dict(filter_counts)}")
         else:
@@ -208,27 +173,27 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
         elif filter_type == 'SAFETY_SWITCH':
             print(f"     Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)")
             if config.get('safe_assets'):
-                # Count safe asset positions
                 safe_symbols = set(config.get('safe_assets', []))
                 safe_positions = positions['position'].isin(safe_symbols).sum()
                 risk_positions = invested_positions - safe_positions
                 print(f"     Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
         elif filter_type == 'STORMGUARD':
-            print(f"     Filter: STORMGUARD (Adapted for Free Data)")
-            print(f"       Metric 1: Price-Trend = 21 × DEMA_50(SPY Returns) + 0.5%")
-            print(f"       Metric 2: Money Flow = OBV - SMA_50(OBV) using SPY volume")
-            print(f"       Metric 3: Sentiment = SMA_50(VIX) - VIX (low fear when > 0)")
-            print(f"       Metric 4: Volatility Circuit Breaker = (VIX > {config.get('stormguard_volatility_threshold', 40)}) AND (SPY < SMA_20)")
-            print(f"       State Machine: Asymmetric Bull/Bear with False Alarm & Early Return tests")
+            print(f"     Filter: STORMGUARD (5-Component Analysis)")
             if config.get('safe_assets'):
-                # Count safe asset positions
+                safe_symbols = set(config.get('safe_assets', []))
+                safe_positions = positions['position'].isin(safe_symbols).sum()
+                risk_positions = invested_positions - safe_positions
+                print(f"       Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
+        elif filter_type == 'STORMGUARD_VELOCITY':
+            print(f"     Filter: STORMGUARD-VELOCITY (5-Component + 3-State Machine)")
+            if config.get('safe_assets'):
                 safe_symbols = set(config.get('safe_assets', []))
                 safe_positions = positions['position'].isin(safe_symbols).sum()
                 risk_positions = invested_positions - safe_positions
                 print(f"       Risk Assets: {risk_positions} | Safe Assets: {safe_positions} | Cash: {cash_positions}")
         else:
             print(f"     Filter: NONE")
-        if filter_type not in ['SAFETY_SWITCH', 'STORMGUARD'] or not config.get('safe_assets'):
+        if filter_type not in ['SAFETY_SWITCH', 'STORMGUARD', 'STORMGUARD_VELOCITY'] or not config.get('safe_assets'):
             print(f"     Invested: {invested_positions} | Cash: {cash_positions}")
         print()
         
@@ -240,7 +205,7 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             slippage_pct=slippage_pct
         )
         equity_curve, trades = engine.run_backtest(prices, positions)
-        metrics = engine.calculate_metrics(equity_curve)
+        metrics = engine.calculate_metrics(equity_curve, trades)
         print(f"[OK] Backtest complete - {len(trades)} trades executed\n")
         
         # Step 5: Run benchmark (SPY buy & hold)
@@ -251,27 +216,38 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             slippage_pct=slippage_pct
         )
         
-        # Get SPY prices - use actual_start_date to match strategy start date
+        # Get SPY prices for benchmark - MUST start at actual_start_date (same as strategy)
         if 'SPY' in prices.columns:
-            # SPY already loaded, align to actual_start_date
-            spy_prices = prices['SPY']
+            # SPY is in universe, but prices includes lookback data
+            # Filter to actual backtest period only
+            spy_prices_full = prices['SPY']
+            spy_prices = spy_prices_full[spy_prices_full.index >= actual_start_date].copy()
         else:
-            # If SPY not in universe, download it starting from actual_start_date
+            # SPY not in universe, download it starting from actual_start_date
             spy_prices = loader.get_close_prices(['SPY'], actual_start_date, end_date)['SPY']
         
-        # Ensure benchmark starts at same date as strategy (align indices)
+        # Benchmark must start at same date as strategy equity curve
         benchmark_start = equity_curve.index[0] if not equity_curve.empty else actual_start_date
         spy_prices_aligned = spy_prices[spy_prices.index >= benchmark_start].copy()
         
-        benchmark_equity, benchmark_trades = benchmark_runner.run_buy_and_hold(spy_prices_aligned, "SPY")
-        benchmark_metrics = benchmark_runner.calculate_metrics(benchmark_equity)
-        print(f"[OK] Benchmark complete (aligned to strategy start: {benchmark_start.date()})\n")
+        if len(spy_prices_aligned) == 0:
+            raise ValueError(f"No SPY data available from {benchmark_start.date()}")
         
-        # Step 6: Generate reports with benchmark comparison
+        benchmark_equity, benchmark_trades = benchmark_runner.run_buy_and_hold(spy_prices_aligned, "SPY")
+        benchmark_metrics = benchmark_runner.calculate_metrics(benchmark_equity, benchmark_trades)
+        
+        # Verify alignment
+        if benchmark_equity.index[0] != equity_curve.index[0]:
+            print(f"[WARNING] Benchmark start mismatch:")
+            print(f"  Strategy: {equity_curve.index[0].date()}")
+            print(f"  Benchmark: {benchmark_equity.index[0].date()}")
+        
+        print(f"[OK] Benchmark complete (start: {benchmark_equity.index[0].date()}, aligned to strategy)\n")
+        
+        # Step 6: Generate reports
         print("Step 6/6: Generating reports...")
         reporter = BacktestReporter(output_dir=output_dir)
         
-        # Generate strategy reports
         reporter.create_full_report(
             equity_curve=equity_curve,
             trades=trades,
@@ -281,35 +257,22 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             momentum_type=actual_momentum_type,
             momentum_period=config.get('momentum_period', 21),
             filter_history=filter_history,
+            regime_history=regime_history,
             spy_prices=spy_prices,
             spy_volume=spy_volume,
             vix_prices=vix_prices,
-            config=config
-        )
-        
-        # Generate benchmark reports
-        reporter.save_metrics(benchmark_metrics, f"{universe_name}_benchmark_metrics.csv")
-        reporter.save_equity_curve(benchmark_equity, f"{universe_name}_benchmark_equity.csv")
-        
-        # Generate comparison plot
-        reporter.plot_strategy_vs_benchmark(
-            strategy_equity=equity_curve,
+            hyg_prices=hyg_prices,
+            ief_prices=ief_prices,
+            rsp_prices=rsp_prices,
+            config=config,
+            schedule=schedule,
             benchmark_equity=benchmark_equity,
-            strategy_name=universe_name,
-            benchmark_name="SPY Buy & Hold",
-            filename=f"{universe_name}_vs_benchmark.png"
-        )
-        
-        # Calculate and save relative metrics
-        relative_metrics = calculate_relative_metrics(metrics, benchmark_metrics)
-        reporter.save_comparison_metrics(
-            strategy_metrics=metrics,
-            benchmark_metrics=benchmark_metrics,
-            relative_metrics=relative_metrics,
-            filename=f"{universe_name}_comparison.csv"
+            benchmark_metrics=benchmark_metrics
         )
         
         # Print comparison summary
+        relative_metrics = calculate_relative_metrics(metrics, benchmark_metrics)
+        
         print(f"\n{'='*80}")
         print(f"Performance Comparison: {universe_name} vs SPY Buy & Hold")
         print(f"{'='*80}")
@@ -333,9 +296,7 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
             print(f"{label:<30} {strat_val:>15.2f} {bench_val:>15.2f} {diff:>15.2f}")
         
         print(f"{'='*80}\n")
-        
         print(f"[OK] Reports generated successfully\n")
-        
         print(f"{'='*80}")
         print(f"Backtest complete for {universe_name}")
         print(f"{'='*80}\n")
@@ -350,19 +311,258 @@ def run_backtest_for_universe(universe_name: str, config: Dict, output_dir: str)
         raise
 
 
+def run_multi_bucket_backtest(buckets: list, config: Dict, output_dir: str) -> None:
+    """
+    Run backtest for multi-bucket portfolio.
+    
+    Args:
+        buckets: List of (universe_name, allocation) tuples
+        config: Configuration dictionary
+        output_dir: Output directory for results
+    """
+    start_date = config['start_date']
+    end_date = config['end_date']
+    initial_capital = config['initial_capital']
+    commission_pct = config['commission_pct']
+    slippage_pct = config['slippage_pct']
+    data_dir = config['data_dir']
+    cache_enabled = config['cache_enabled']
+    
+    portfolio_name = "+".join([f"{int(alloc*100)}{name[:3]}" for name, alloc in buckets])
+    
+    print(f"\n{'='*80}")
+    print(f"Running MULTI-BUCKET backtest: {portfolio_name}")
+    print(f"Buckets: {len(buckets)}")
+    for bucket_name, allocation in buckets:
+        print(f"  - {bucket_name}: {allocation*100:.0f}%")
+    print(f"Period: {start_date.date()} to {end_date.date()}")
+    print(f"{'='*80}\n")
+    
+    try:
+        # Step 1: Load data for all buckets
+        print("Step 1/6: Loading price data for all buckets...")
+        loader = DataLoader(data_dir=data_dir, cache_enabled=cache_enabled)
+        
+        extended_start = datetime(start_date.year - 10, 1, 1)
+        prices_dict = {}
+        all_symbols = set()
+        
+        for bucket_name, _ in buckets:
+            symbols = config['universes'][bucket_name]
+            all_symbols.update(symbols)
+            bucket_prices = loader.get_close_prices(symbols, extended_start, end_date)
+            prices_dict[bucket_name] = bucket_prices
+        
+        print(f"[OK] Loaded {len(buckets)} buckets with {len(all_symbols)} unique symbols\n")
+        
+        # Find earliest inception date across ALL buckets (same as single-bucket)
+        all_first_valid_dates = []
+        for bucket_name, _ in buckets:
+            bucket_prices = prices_dict[bucket_name]
+            for col in bucket_prices.columns:
+                first_valid = bucket_prices[col].first_valid_index()
+                if first_valid is not None:
+                    all_first_valid_dates.append(first_valid)
+        
+        earliest_inception = max(all_first_valid_dates) if all_first_valid_dates else start_date
+        
+        # Check if we have enough history for polymorphic
+        actual_start_date = start_date
+        actual_momentum_type = config.get('momentum_type', 'ROC')
+        
+        if actual_momentum_type == 'POLYMORPHIC':
+            min_history_years = config.get('polymorphic_min_history_years', 5)
+            required_history_start = start_date - timedelta(days=min_history_years * 365)
+            
+            if earliest_inception > required_history_start:
+                years_available = (start_date - earliest_inception).days / 365
+                print(f"\n[WARNING] Insufficient history for POLYMORPHIC mode")
+                print(f"          Earliest asset inception: {earliest_inception.date()}")
+                print(f"          Available history: {years_available:.1f} years")
+                print(f"          Required: {min_history_years} years before {start_date.date()}")
+                
+                adjusted_start = earliest_inception + timedelta(days=min_history_years * 365)
+                if adjusted_start < end_date:
+                    print(f"          Adjusting start date to {adjusted_start.date()}\n")
+                    actual_start_date = adjusted_start
+                else:
+                    fallback_type = config.get('polymorphic_fallback_momentum', 'ROC')
+                    print(f"          Falling back to {fallback_type} momentum\n")
+                    actual_momentum_type = fallback_type
+        
+        # Step 2: Create rebalance schedule
+        print("Step 2/6: Creating rebalance schedule...")
+        momentum_period = config.get('momentum_period', 21)
+        schedule = create_rebalance_schedule(
+            start_date=actual_start_date,
+            end_date=end_date,
+            frequency=config.get('rebalance_frequency', 'weekly'),
+            weekday=config.get('rebalance_weekday', 0),
+            lookback_periods=momentum_period,
+            market=config.get('market_calendar', 'NYSE')
+        )
+        
+        # Calculate data start date (need lookback for momentum calculation)
+        if not schedule.empty:
+            min_data_start = schedule['data_start_date'].min()
+            data_lookback_days = momentum_period * 3
+            min_required_date = actual_start_date - timedelta(days=data_lookback_days)
+            prices_start_date = min(min_data_start, min_required_date, earliest_inception)
+        else:
+            data_lookback_days = momentum_period * 3
+            prices_start_date = min(actual_start_date - timedelta(days=data_lookback_days), earliest_inception)
+        
+        # Trim all bucket prices to include lookback data
+        for bucket_name in prices_dict.keys():
+            bucket_prices = prices_dict[bucket_name]
+            prices_dict[bucket_name] = bucket_prices[
+                (bucket_prices.index >= prices_start_date) & (bucket_prices.index <= end_date)
+            ]
+        
+        print(f"[OK] Generated {len(schedule)} rebalance dates")
+        print(f"     Backtest period: {actual_start_date.date()} to {end_date.date()}")
+        print(f"     Earliest asset inception: {earliest_inception.date()}")
+        print(f"     Data starts: {prices_start_date.date()} (includes lookback)\n")
+        
+        # Step 3: Load filter data
+        print("Step 3/6: Loading filter data...")
+        spy_prices, safe_prices, spy_volume, vix_prices, hyg_prices, ief_prices, rsp_prices = load_filter_data(
+            config, loader, extended_start, end_date
+        )
+        
+        # Step 4: Generate positions
+        print("Step 4/6: Generating multi-bucket positions...")
+        strategy = create_strategy_from_config(config, actual_momentum_type)
+        
+        # Load OHLC data for all buckets if needed
+        prices_ohlc_dict = None
+        if config.get('enable_price_action_filter', False):
+            print(f"Loading OHLC data for price action filter...")
+            prices_ohlc_dict = {}
+            for bucket_name, _ in buckets:
+                bucket_symbols = config['universes'][bucket_name]
+                prices_ohlc_dict[bucket_name] = loader.get_ohlc_prices(
+                    bucket_symbols, extended_start, end_date
+                )
+            print(f"[OK] OHLC data loaded for all buckets\n")
+        
+        positions = strategy.generate_multi_bucket_positions(
+            buckets, prices_dict, schedule,
+            spy_prices, safe_prices, spy_volume, vix_prices,
+            hyg_prices, ief_prices, rsp_prices, None, prices_ohlc_dict
+        )
+        
+        regime_history = strategy.get_regime_history()
+        print(f"[OK] Generated positions for {len(positions)} rebalance dates\n")
+        
+        # Step 5: Run backtest
+        print("Step 5/6: Running multi-bucket backtest...")
+        engine = BacktestEngine(
+            initial_capital=initial_capital,
+            commission_pct=commission_pct,
+            slippage_pct=slippage_pct
+        )
+        equity_curve, trades = engine.run_multi_bucket_backtest(prices_dict, positions, buckets)
+        metrics = engine.calculate_metrics(equity_curve, trades)
+        print(f"[OK] Backtest complete - {len(trades)} trades executed\n")
+        
+        # Step 6: Run benchmark and generate reports
+        print("Step 6/6: Running benchmark and generating reports...")
+        benchmark_runner = BenchmarkRunner(
+            initial_capital=initial_capital,
+            commission_pct=commission_pct,
+            slippage_pct=slippage_pct
+        )
+        
+        spy_benchmark = loader.get_close_prices(['SPY'], actual_start_date, end_date)['SPY']
+        benchmark_start = equity_curve.index[0] if not equity_curve.empty else actual_start_date
+        spy_aligned = spy_benchmark[spy_benchmark.index >= benchmark_start].copy()
+        
+        if len(spy_aligned) == 0:
+            raise ValueError(f"No SPY data from {benchmark_start.date()}")
+        
+        benchmark_equity, benchmark_trades = benchmark_runner.run_buy_and_hold(spy_aligned, "SPY")
+        benchmark_metrics = benchmark_runner.calculate_metrics(benchmark_equity, benchmark_trades)
+        
+        # Verify alignment
+        if benchmark_equity.index[0] != equity_curve.index[0]:
+            print(f"[WARNING] Benchmark start mismatch:")
+            print(f"  Strategy: {equity_curve.index[0].date()}")
+            print(f"  Benchmark: {benchmark_equity.index[0].date()}")
+        
+        print(f"[OK] Benchmark complete (start: {benchmark_equity.index[0].date()}, aligned to strategy)\n")
+        
+        reporter = BacktestReporter(output_dir=output_dir)
+        reporter.create_full_report(
+            equity_curve=equity_curve,
+            trades=trades,
+            metrics=metrics,
+            universe_name=portfolio_name,
+            config=config,
+            regime_history=regime_history,
+            benchmark_equity=benchmark_equity,
+            benchmark_metrics=benchmark_metrics,
+            buckets=buckets
+        )
+        
+        print(f"\n{'='*80}")
+        print(f"Multi-bucket backtest complete: {portfolio_name}")
+        print(f"{'='*80}\n")
+        
+    except Exception as e:
+        print(f"\n{'!'*80}")
+        print(f"ERROR: Multi-bucket backtest failed")
+        print(f"Error: {str(e)}")
+        print(f"{'!'*80}\n")
+        import traceback
+        traceback.print_exc()
+        raise
+
+
 def main():
     """Main entry point for running backtests."""
-    # Get configuration
     config = get_config()
-    universe_name = ACTIVE_UNIVERSE
     
-    # Create timestamped output directory
+    # Multi-bucket mode
+    if config.get('is_multi_bucket', False):
+        buckets = config['active_universes']
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        freq = "W" if config['rebalance_frequency'] == 'weekly' else "M"
+        run_name = f"{timestamp}_MultiBucket_{config['momentum_type']}{config['momentum_period']}d_{freq}"
+        run_output_dir = os.path.join(config['output_dir'], run_name)
+        
+        Path(run_output_dir).mkdir(parents=True, exist_ok=True)
+        
+        print("\n" + "="*80)
+        print("MULTI-BUCKET PORTFOLIO BACKTEST")
+        print("="*80)
+        print(f"Run Name: {run_name}")
+        print(f"Buckets: {len(buckets)}")
+        for name, alloc in buckets:
+            print(f"  - {name}: {alloc*100:.0f}%")
+        print(f"Momentum: {config['momentum_type']} ({config['momentum_period']}d)")
+        print(f"Filter: {config.get('filter_type', 'NONE')}")
+        print(f"Output Directory: {run_output_dir}")
+        print("="*80)
+        
+        run_multi_bucket_backtest(buckets, config, run_output_dir)
+        
+        print("\n" + "="*80)
+        print("MULTI-BUCKET BACKTEST COMPLETE")
+        print("="*80 + "\n")
+        return
+    
+    # Single-bucket mode
+    if isinstance(ACTIVE_UNIVERSE, str):
+        universe_name = ACTIVE_UNIVERSE
+    else:
+        raise ValueError("ACTIVE_UNIVERSE must be a string in single-bucket mode.")
+    
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     freq = "W" if config['rebalance_frequency'] == 'weekly' else "M"
     run_name = f"{timestamp}_{universe_name}_{config['momentum_type']}{config['momentum_period']}d_{freq}_Top{config['top_n']}"
     run_output_dir = os.path.join(config['output_dir'], run_name)
     
-    # Create directory
     Path(run_output_dir).mkdir(parents=True, exist_ok=True)
     
     print("\n" + "="*80)
@@ -378,14 +578,14 @@ def main():
     print(f"  Top N: {config['top_n']}")
     print(f"  Rebalance: {config['rebalance_frequency'].capitalize()}", end="")
     if config['rebalance_frequency'] == 'weekly':
-        print(f" ({'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])})")
+        weekday_name = 'Monday' if config['rebalance_weekday'] == 0 else f"Weekday {config['rebalance_weekday']}"
+        print(f" ({weekday_name})")
     else:
         print()
     
-    # Show filter status
     filter_type = config.get('filter_type', 'NONE')
     if filter_type == 'DUAL_EMA':
-        print(f"  Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, {config['ema_derivative_lookback']}d slope)")
+        print(f"  Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d)")
     elif filter_type == 'SAFETY_SWITCH':
         print(f"  Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)")
     else:
@@ -396,153 +596,39 @@ def main():
     print(f"  Slippage: {config['slippage_pct']*100:.3f}%")
     print("="*80)
     
-    # Run backtest for active universe
+    # Run backtest
     run_backtest_for_universe(
         universe_name=universe_name,
         config=config,
         output_dir=run_output_dir
     )
     
-    # Save run configuration and create README
-    config_file = os.path.join(run_output_dir, "run_config.txt")
-    readme_file = os.path.join(run_output_dir, "README.txt")
-    symbols = config['universes'][universe_name]
-    
-    # Get metrics for logging
+    # Get metrics for reporting
     metrics_file = os.path.join(run_output_dir, f"{universe_name}_metrics.csv")
     final_metrics = {}
     if os.path.exists(metrics_file):
         metrics_df = pd.read_csv(metrics_file, index_col=0)
         final_metrics = metrics_df['Value'].to_dict()
     
-    with open(config_file, 'w') as f:
-        f.write(f"Run Name: {run_name}\n")
-        f.write(f"Timestamp: {timestamp}\n")
-        f.write(f"Universe: {universe_name}\n")
-        f.write(f"Symbols: {', '.join(symbols)}\n")
-        f.write(f"Start Date: {config['start_date'].date()}\n")
-        f.write(f"End Date: {config['end_date'].date()}\n")
-        f.write(f"Momentum: {config['momentum_type']} ({config['momentum_period']} days)\n")
-        f.write(f"Top N: {config['top_n']}\n")
-        f.write(f"Rebalance: {config['rebalance_frequency'].capitalize()}")
-        if config['rebalance_frequency'] == 'weekly':
-            f.write(f" ({'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])})\n")
-        else:
-            f.write("\n")
-        f.write(f"Market: {config.get('market_calendar', 'NYSE')}\n")
-        filter_type = config.get('filter_type', 'NONE')
-        if filter_type == 'DUAL_EMA':
-            f.write(f"Filter: Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, derivative: {config['ema_derivative_lookback']}d)\n")
-        elif filter_type == 'SAFETY_SWITCH':
-            f.write(f"Filter: Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)\n")
-            if config.get('safe_assets'):
-                f.write(f"Safe Assets: {', '.join(config['safe_assets'])}\n")
-        else:
-            f.write(f"Filter: NONE\n")
-        
-        f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
-        f.write(f"Commission: {config['commission_pct']*100:.2f}%\n")
-        f.write(f"Slippage: {config['slippage_pct']*100:.3f}%\n")
-    
-    # Create a comprehensive README
-    with open(readme_file, 'w') as f:
-        f.write("="*80 + "\n")
-        f.write(f"BACKTEST RUN: {run_name}\n")
-        f.write("="*80 + "\n\n")
-        
-        f.write("CONFIGURATION\n")
-        f.write("-" * 80 + "\n")
-        f.write(f"Universe:        {universe_name}\n")
-        f.write(f"Period:          {config['start_date'].date()} to {config['end_date'].date()}\n")
-        f.write(f"Strategy:        Top-{config['top_n']} Momentum ({config['momentum_type']} {config['momentum_period']} days)\n")
-        f.write(f"Rebalance:       {config['rebalance_frequency'].capitalize()}")
-        if config['rebalance_frequency'] == 'weekly':
-            f.write(f" ({'Monday' if config['rebalance_weekday'] == 0 else 'Weekday ' + str(config['rebalance_weekday'])})\n")
-        else:
-            f.write("\n")
-        f.write(f"Market:          {config.get('market_calendar', 'NYSE')}\n")
-        filter_type = config.get('filter_type', 'NONE')
-        if filter_type == 'DUAL_EMA':
-            f.write(f"Filter:          Dual EMA ({config['ema_short_period']}d/{config['ema_long_period']}d, {config['ema_derivative_lookback']}d slope)\n")
-            f.write(f"                 Price>{config['ema_short_period']}d, {config['ema_short_period']}d>{config['ema_long_period']}d, {config['ema_long_period']}d slope>0\n")
-        elif filter_type == 'SAFETY_SWITCH':
-            f.write(f"Filter:          Safety Switch (SPY {config['safety_sma_short']}d/{config['safety_sma_long']}d SMA)\n")
-            f.write(f"                 Bull: SPY.SMA({config['safety_sma_short']}) > SMA({config['safety_sma_long']}) -> Trade risk assets\n")
-            if config.get('safe_assets'):
-                f.write(f"                 Bear: SPY.SMA({config['safety_sma_short']}) < SMA({config['safety_sma_long']}) -> Rotate to safe assets\n")
-                f.write(f"                 Safe Assets: {', '.join(config['safe_assets'][:3])}{'...' if len(config['safe_assets']) > 3 else ''}\n")
-            else:
-                f.write(f"                 Bear: SPY.SMA({config['safety_sma_short']}) < SMA({config['safety_sma_long']}) -> CASH\n")
-        else:
-            f.write(f"Filter:          NONE\n")
-        
-        f.write(f"\n")
-        f.write(f"Initial Capital: ${config['initial_capital']:,.2f}\n")
-        f.write(f"Costs:           {config['commission_pct']*100:.2f}% commission + {config['slippage_pct']*100:.3f}% slippage\n\n")
-        
-        f.write("FILES IN THIS DIRECTORY\n")
-        f.write("-" * 80 + "\n")
-        f.write(f"{universe_name}_metrics.csv              - Strategy performance metrics\n")
-        f.write(f"{universe_name}_benchmark_metrics.csv    - SPY buy & hold metrics\n")
-        f.write(f"{universe_name}_comparison.csv           - Side-by-side comparison\n")
-        f.write(f"{universe_name}_trades.csv               - Complete trade log\n")
-        f.write(f"{universe_name}_equity.csv               - Daily equity curve\n")
-        f.write(f"{universe_name}_benchmark_equity.csv     - SPY equity curve\n")
-        f.write(f"{universe_name}_equity_curve.png         - Strategy equity chart (color-coded)\n")
-        f.write(f"{universe_name}_vs_benchmark.png         - Strategy vs SPY comparison\n")
-        f.write(f"{universe_name}_drawdown.png             - Drawdown analysis\n")
-        f.write(f"{universe_name}_monthly_returns.png      - Monthly returns heatmap\n")
-        f.write(f"{universe_name}_returns_dist.png         - Returns distribution\n")
-        f.write(f"{universe_name}_momentum_over_time.png   - All stocks' momentum ({config['momentum_type']}) over time\n\n")
-        
-        f.write("QUICK START\n")
-        f.write("-" * 80 + "\n")
-        f.write("1. Check the comparison plot: *_vs_benchmark.png\n")
-        f.write("2. Review metrics: *_comparison.csv\n")
-        f.write("3. Examine trades: *_trades.csv\n")
-        f.write("4. Analyze drawdowns: *_drawdown.png\n\n")
-        
-        # Add performance results if available
-        if final_metrics:
-            f.write("RESULTS\n")
-            f.write("-" * 80 + "\n")
-            for key in ['Total Return (%)', 'CAGR (%)', 'Sharpe Ratio', 'Sortino Ratio', 
-                       'Calmar Ratio', 'Max Drawdown (%)']:
-                if key in final_metrics:
-                    f.write(f"{key:<30} {final_metrics[key]:>15.2f}\n")
-            f.write("\n")
+    # Generate configuration and documentation
+    config_file = generate_run_config_file(
+        run_output_dir, run_name, timestamp, universe_name, config
+    )
+    readme_file = generate_readme_file(
+        run_output_dir, run_name, universe_name, config, final_metrics
+    )
     
     print(f"\nRun configuration saved to: {config_file}")
     print(f"README created: {readme_file}")
     
-    # Auto-append to experiments log
-    experiments_log = config.get('experiments_log', 'experiments/experiments.md')
-    if os.path.exists(experiments_log) and final_metrics:
-        with open(experiments_log, 'a') as f:
-            f.write(f"\n## {run_name}\n")
-            f.write(f"**Date:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n")
-            f.write(f"**Configuration:**\n")
-            f.write(f"- Universe: {universe_name}\n")
-            f.write(f"- Momentum: {config['momentum_type']} ({config['momentum_period']}d)\n")
-            f.write(f"- Rebalance: {config['rebalance_frequency']}\n")
-            filter_type = config.get('filter_type', 'NONE')
-            f.write(f"- Filter: {filter_type}")
-            if filter_type == 'DUAL_EMA':
-                f.write(f" ({config['ema_short_period']}/{config['ema_long_period']}/{config['ema_derivative_lookback']}d)")
-            elif filter_type == 'SAFETY_SWITCH':
-                f.write(f" (SPY {config['safety_sma_short']}/{config['safety_sma_long']}d)")
-                if config.get('safe_assets'):
-                    f.write(f" + {len(config['safe_assets'])} safe assets")
-            f.write("\n\n")
-            f.write(f"**Results:**\n")
-            f.write(f"- CAGR: {final_metrics.get('CAGR (%)', 0):.2f}%\n")
-            f.write(f"- Sharpe: {final_metrics.get('Sharpe Ratio', 0):.2f}\n")
-            f.write(f"- Sortino: {final_metrics.get('Sortino Ratio', 0):.2f}\n")
-            f.write(f"- Calmar: {final_metrics.get('Calmar Ratio', 0):.2f}\n")
-            f.write(f"- Max DD: {final_metrics.get('Max Drawdown (%)', 0):.2f}%\n")
-            f.write(f"- Total Return: {final_metrics.get('Total Return (%)', 0):.2f}%\n")
-            f.write(f"- Path: `{run_output_dir}`\n\n")
-        print(f"Results logged to: {experiments_log}")
+    # Log to experiments
+    log_to_experiments(
+        config.get('experiments_log', 'experiments/experiments.md'),
+        run_name, run_output_dir, universe_name, config, final_metrics
+    )
+    
+    if final_metrics:
+        print(f"Results logged to: {config.get('experiments_log', 'experiments/experiments.md')}")
     
     print("\n" + "="*80)
     print("ALL BACKTESTS COMPLETE")

@@ -324,6 +324,101 @@ def apply_dual_ema_filter_to_momentum(
     return momentum.where(ema_filter, np.nan)
 
 
+def apply_volatility_adjustment(
+    momentum: pd.DataFrame,
+    prices: pd.DataFrame,
+    vol_period: int = 63,
+    max_threshold: float = 0.25,
+    penalty_mult: float = 0.8
+) -> pd.DataFrame:
+    """
+    Apply volatility adjustment to momentum scores (Sharpe-like).
+    
+    Calculates risk-adjusted momentum by penalizing high volatility.
+    Formula: adjusted_score = raw_momentum / (volatility + small_constant)
+    
+    Args:
+        momentum: DataFrame with momentum values (percentages)
+        prices: Original prices DataFrame for volatility calculation
+        vol_period: Period for volatility calculation
+        max_threshold: Maximum volatility before penalization (0.25 = 25%)
+        penalty_mult: Multiplier for scores above threshold
+        
+    Returns:
+        DataFrame with volatility-adjusted momentum values
+    """
+    # Calculate volatility (std of returns) for each symbol
+    returns = prices.pct_change()
+    volatility = returns.rolling(window=vol_period).std() * np.sqrt(252)  # Annualized
+    
+    # Adjust momentum scores
+    adjusted = momentum.copy()
+    for symbol in momentum.columns:
+        if symbol not in volatility.columns:
+            continue
+        
+        # Volatility-adjusted score (Sharpe-like)
+        vol_series = volatility[symbol]
+        momentum_series = momentum[symbol]
+        
+        # Avoid division by zero
+        adjusted[symbol] = momentum_series / (vol_series + 0.001)
+        
+        # Additional penalty for excessive volatility
+        high_vol_mask = vol_series > max_threshold
+        adjusted.loc[high_vol_mask, symbol] *= penalty_mult
+    
+    return adjusted
+
+
+def get_popndrop_filter(
+    prices: pd.DataFrame,
+    max_return: float = 0.15,
+    lookback: int = 21
+) -> pd.DataFrame:
+    """
+    PopNDrop filter: Exclude overbought ETFs that have "popped" too much.
+    
+    CORE11 methodology: Avoid ETFs with >15% gain in 21 days (likely to reverse).
+    
+    Args:
+        prices: DataFrame with symbols as columns, dates as index
+        max_return: Maximum return threshold (0.15 = 15%)
+        lookback: Lookback period for return calculation (21 days)
+        
+    Returns:
+        DataFrame with True where ETF is NOT overbought, False where overbought
+    """
+    returns = calculate_roc(prices, period=lookback) / 100  # Convert % to decimal
+    
+    # ETF is eligible if it has NOT exceeded max return
+    eligible = returns <= max_return
+    
+    return eligible
+
+
+def apply_popndrop_filter_to_momentum(
+    momentum: pd.DataFrame,
+    prices: pd.DataFrame,
+    max_return: float = 0.15,
+    lookback: int = 21
+) -> pd.DataFrame:
+    """
+    Apply PopNDrop filter to momentum scores.
+    
+    Args:
+        momentum: DataFrame with momentum values
+        prices: Original prices DataFrame for return calculation
+        max_return: Maximum return threshold (0.15 = 15%)
+        lookback: Lookback period for return calculation
+        
+    Returns:
+        DataFrame with momentum values (NaN where overbought)
+    """
+    popndrop_filter = get_popndrop_filter(prices, max_return, lookback)
+    return momentum.where(popndrop_filter, np.nan)
+
+
 # Legacy alias for backward compatibility with tests
 def apply_dual_ema_filter_to_roc(
     prices: pd.DataFrame,
@@ -481,3 +576,241 @@ def check_vix_sentiment(
     """
     vix_sma = vix_prices.rolling(window=sma_period, min_periods=sma_period).mean()
     return vix_prices < vix_sma
+
+
+# ============================================================================
+# PRICE ACTION ENTRY FILTERS
+# ============================================================================
+
+def check_ema20_low_entry(
+    symbol: str,
+    prices_ohlc: pd.DataFrame,
+    signal_date,
+    lookback_days: int = 21
+) -> bool:
+    """
+    Price action entry filter: Check if Low ≤ EMA(20) in recent days.
+    
+    Purpose: Avoid buying momentum stocks that are extended. Wait for a
+    pullback to the 20-day moving average before entering.
+    
+    Logic: Look back N days from signal_date. If ANY day had Low ≤ EMA(20),
+    then the asset has recently pulled back to support and is ready for entry.
+    
+    Args:
+        symbol: Symbol to check
+        prices_ohlc: DataFrame with OHLC data (multi-level columns)
+        signal_date: Date to evaluate (uses data up to this date)
+        lookback_days: Days to look back for valid entry signal (default 21)
+        
+    Returns:
+        True if entry signal found (Low ≤ EMA(20) in last N days), False otherwise
+    """
+    # Need OHLC data with multi-level columns
+    if symbol not in prices_ohlc.columns.get_level_values(0):
+        return False
+    
+    # Get close prices for EMA calculation
+    if (symbol, 'Close') not in prices_ohlc.columns:
+        return False
+    close_prices = prices_ohlc[(symbol, 'Close')]
+    
+    # Get low prices
+    if (symbol, 'Low') not in prices_ohlc.columns:
+        return False
+    low_prices = prices_ohlc[(symbol, 'Low')]
+    
+    # Filter data up to signal date
+    close_up_to_date = close_prices[close_prices.index <= signal_date]
+    low_up_to_date = low_prices[low_prices.index <= signal_date]
+    
+    # Need enough data for EMA(20)
+    if len(close_up_to_date) < 20:
+        return False
+    
+    # Calculate EMA(20)
+    ema20 = close_up_to_date.ewm(span=20, adjust=False, min_periods=20).mean()
+    
+    # Get last N days
+    lookback_start_date = signal_date - pd.Timedelta(days=lookback_days * 2)  # Buffer for weekends
+    
+    # Filter to lookback window
+    ema20_lookback = ema20[ema20.index >= lookback_start_date]
+    low_lookback = low_up_to_date[low_up_to_date.index >= lookback_start_date]
+    
+    # Check if ANY day in the window had Low ≤ EMA(20)
+    # Align indices
+    common_dates = ema20_lookback.index.intersection(low_lookback.index)
+    
+    if len(common_dates) == 0:
+        return False
+    
+    for date in common_dates:
+        if low_lookback.loc[date] <= ema20_lookback.loc[date]:
+            return True  # Found a valid entry day
+    
+    return False  # No valid entry signal in lookback period
+
+
+def check_ema20_defended_entry(
+    symbol: str,
+    prices_ohlc: pd.DataFrame,
+    signal_date,
+    lookback_days: int = 21,
+    relative_close_threshold: float = 0.5
+) -> bool:
+    """
+    Enhanced price action filter: Low ≤ EMA(20) AND closed in upper half of range.
+    
+    This is stronger than EMA20_LOW because it requires buyers to defend support.
+    A bar that touches EMA(20) but closes near the low shows weak support.
+    A bar that touches EMA(20) and closes near the high shows strong support.
+    
+    RelativeClose = (Close - Low) / (High - Low)
+    
+    Args:
+        symbol: Symbol to check
+        prices_ohlc: DataFrame with OHLC data (multi-level columns)
+        signal_date: Date to evaluate
+        lookback_days: Days to look back for valid entry signal
+        relative_close_threshold: Minimum relative close (0.5 = upper half)
+        
+    Returns:
+        True if found a bar where Low ≤ EMA(20) AND RelativeClose > threshold
+    """
+    if symbol not in prices_ohlc.columns.get_level_values(0):
+        return False
+    
+    # Get OHLC prices
+    if (symbol, 'Close') not in prices_ohlc.columns:
+        return False
+    if (symbol, 'High') not in prices_ohlc.columns:
+        return False
+    if (symbol, 'Low') not in prices_ohlc.columns:
+        return False
+    
+    close_prices = prices_ohlc[(symbol, 'Close')]
+    high_prices = prices_ohlc[(symbol, 'High')]
+    low_prices = prices_ohlc[(symbol, 'Low')]
+    
+    # Filter to signal date
+    close_up_to_date = close_prices[close_prices.index <= signal_date]
+    high_up_to_date = high_prices[high_prices.index <= signal_date]
+    low_up_to_date = low_prices[low_prices.index <= signal_date]
+    
+    if len(close_up_to_date) < 20:
+        return False
+    
+    # Calculate EMA(20)
+    ema20 = close_up_to_date.ewm(span=20, adjust=False, min_periods=20).mean()
+    
+    # Calculate RelativeClose for each bar
+    # RelativeClose = (Close - Low) / (High - Low)
+    range_size = high_up_to_date - low_up_to_date
+    range_size = range_size.replace(0, 0.001)  # Avoid division by zero
+    relative_close = (close_up_to_date - low_up_to_date) / range_size
+    
+    # Get lookback window
+    lookback_start = signal_date - pd.Timedelta(days=lookback_days * 2)
+    ema20_lookback = ema20[ema20.index >= lookback_start]
+    low_lookback = low_up_to_date[low_up_to_date.index >= lookback_start]
+    relative_close_lookback = relative_close[relative_close.index >= lookback_start]
+    
+    # Find common dates
+    common_dates = ema20_lookback.index.intersection(low_lookback.index).intersection(relative_close_lookback.index)
+    
+    if len(common_dates) == 0:
+        return False
+    
+    # Check if ANY day had: Low ≤ EMA(20) AND RelativeClose > threshold
+    for date in common_dates:
+        low_touched_ema = low_lookback.loc[date] <= ema20_lookback.loc[date]
+        closed_strong = relative_close_lookback.loc[date] > relative_close_threshold
+        
+        if low_touched_ema and closed_strong:
+            return True  # Found defended support
+    
+    return False  # No strong support test in lookback period
+
+
+def select_best_safe_asset(
+    safe_prices: pd.DataFrame,
+    signal_date,
+    momentum_type: str,
+    momentum_period: int
+) -> str:
+    """
+    Select best safe asset using momentum with multi-level fallbacks.
+    
+    Fallback hierarchy:
+    1. Full momentum calculation
+    2. ROC with shorter period (21d minimum)
+    3. 1-day return (most recent)
+    4. First valid price on signal_date
+    5. Any asset with valid data
+    
+    Args:
+        safe_prices: DataFrame with safe asset prices
+        signal_date: Date to evaluate
+        momentum_type: Momentum calculation method
+        momentum_period: Lookback period
+        
+    Returns:
+        Symbol of selected safe asset (always returns a valid symbol)
+    """
+    if safe_prices is None or safe_prices.empty:
+        raise ValueError("Safe assets must be available")
+    
+    safe_up_to_date = safe_prices[safe_prices.index <= signal_date]
+    
+    # Fallback 1: Try full momentum calculation
+    if len(safe_up_to_date) >= momentum_period + 1:
+        try:
+            safe_momentum = calculate_momentum(safe_up_to_date, momentum_type, momentum_period)
+            if signal_date in safe_momentum.index:
+                safe_values = safe_momentum.loc[signal_date].dropna()
+                if len(safe_values) > 0:
+                    return safe_values.idxmax()
+        except Exception as e:
+            print(f"[WARNING] Safe asset {momentum_type}({momentum_period}d) failed: {e}")
+    
+    # Fallback 2: ROC with shorter period (21d minimum)
+    fallback_period = min(momentum_period, max(21, len(safe_up_to_date) - 1))
+    if fallback_period >= 21 and len(safe_up_to_date) >= fallback_period + 1:
+        try:
+            safe_momentum_roc = calculate_momentum(safe_up_to_date, "ROC", fallback_period)
+            if signal_date in safe_momentum_roc.index:
+                safe_values = safe_momentum_roc.loc[signal_date].dropna()
+                if len(safe_values) > 0:
+                    selected = safe_values.idxmax()
+                    print(f"[WARNING] Safe asset fallback to ROC({fallback_period}d): {selected}")
+                    return selected
+        except Exception as e:
+            print(f"[WARNING] Safe asset ROC fallback failed: {e}")
+    
+    # Fallback 3: 1-day return
+    if len(safe_up_to_date) >= 2:
+        try:
+            recent_returns = safe_up_to_date.pct_change().iloc[-1].dropna()
+            if len(recent_returns) > 0:
+                selected = recent_returns.idxmax()
+                print(f"[WARNING] Safe asset fallback to 1-day return: {selected}")
+                return selected
+        except Exception as e:
+            print(f"[WARNING] 1-day return fallback failed: {e}")
+    
+    # Fallback 4: First valid price on signal_date
+    if signal_date in safe_up_to_date.index:
+        valid_on_date = safe_up_to_date.loc[signal_date].dropna()
+        if len(valid_on_date) > 0:
+            selected = valid_on_date.index[0]
+            print(f"[WARNING] Safe asset fallback to first valid price: {selected}")
+            return selected
+    
+    # Fallback 5: Any asset with data
+    for col in safe_up_to_date.columns:
+        if not safe_up_to_date[col].isna().all():
+            print(f"[ERROR] Emergency fallback to first available: {col}")
+            return col
+    
+    raise ValueError(f"No safe assets have valid data on {signal_date.date()}")

@@ -1,13 +1,14 @@
 """Shared performance metrics calculations."""
 
-from typing import Dict
+from typing import Dict, Optional
 import pandas as pd
 import numpy as np
 
 
 def calculate_performance_metrics(
     equity_curve: pd.DataFrame,
-    initial_capital: float
+    initial_capital: float,
+    trades_df: Optional[pd.DataFrame] = None
 ) -> Dict[str, float]:
     """
     Calculate performance metrics from equity curve.
@@ -17,6 +18,7 @@ def calculate_performance_metrics(
     Args:
         equity_curve: DataFrame with 'equity' column
         initial_capital: Initial capital amount
+        trades_df: Optional DataFrame with trade history for accurate trade count
         
     Returns:
         Dictionary of performance metrics
@@ -91,6 +93,6 @@ def calculate_performance_metrics(
         'Win Rate (%)': win_rate,
         'Avg Win (%)': avg_win,
         'Avg Loss (%)': avg_loss,
-        'Total Trades': len(equity),
+        'Total Trades': len(trades_df) if trades_df is not None else 0,
     }
 

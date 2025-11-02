@@ -1,0 +1,11 @@
+Run Name: 20251102_023640_AI_US_Large_Cap_POLYMORPHIC63d_W_Top1
+Timestamp: 20251102_023640
+Universe: AI_US_Large_Cap
+Symbols: VNQ, VTV, VUG, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, SPY
+Start Date: 1995-01-03
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Weekly (Weekday 4)
+Market: NYSE
+Filter: STORMGUARD-VELOCITY (5-Component + 3-State)

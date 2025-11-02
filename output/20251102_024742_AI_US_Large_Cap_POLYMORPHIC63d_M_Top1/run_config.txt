@@ -1,0 +1,20 @@
+Run Name: 20251102_024742_AI_US_Large_Cap_POLYMORPHIC63d_M_Top1
+Timestamp: 20251102_024742
+Universe: AI_US_Large_Cap
+Symbols: VNQ, VTV, VUG, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, SPY
+Start Date: 1995-01-03
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Monthly
+Market: NYSE
+Filter: STORMGUARD-VELOCITY (5-Component + 3-State)
+  - States: BULL -> WATCH -> BEAR
+  - Z-score Threshold: -2.0
+  - ROC Period: 10d
+  - Min Dwell: 10d
+  - WATCH Timeout: 20d
+Safe Assets: TLT, IEF, IEI, SHY, GLD, TIPX, AGG, BND
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%

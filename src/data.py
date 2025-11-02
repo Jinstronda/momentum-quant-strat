@@ -215,3 +215,27 @@ class DataLoader:
         """
         df = self.fetch_symbol(symbol, start_date, end_date, force_refresh)
         return df['Close'], df['Volume']
+    
+    def get_ohlc_prices(
+        self,
+        symbols: List[str],
+        start_date: datetime,
+        end_date: datetime,
+        force_refresh: bool = False
+    ) -> pd.DataFrame:
+        """
+        Get OHLC (Open, High, Low, Close) data for multiple symbols.
+        
+        Used for price action filters that need intraday data.
+        
+        Args:
+            symbols: List of ticker symbols
+            start_date: Start date for data
+            end_date: End date for data
+            force_refresh: Force download even if cached
+            
+        Returns:
+            DataFrame with multi-level columns (symbol, field) where
+            field is one of: Open, High, Low, Close, Volume
+        """
+        return self.fetch_universe(symbols, start_date, end_date, force_refresh)

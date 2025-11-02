@@ -1,0 +1,14 @@
+Run Name: 20251102_004837_AI_Emerging_Markets_POLYMORPHIC63d_M_Top1
+Timestamp: 20251102_004837
+Universe: AI_Emerging_Markets
+Symbols: EEM, EWZ, FXI, EWY, EWT
+Start Date: 2010-01-01
+End Date: 2024-12-31
+Momentum: POLYMORPHIC (63 days)
+Top N: 1
+Rebalance: Monthly
+Market: NYSE
+Filter: NONE
+Initial Capital: $100,000.00
+Commission: 0.10%
+Slippage: 0.050%
